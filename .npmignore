@@ -1,0 +1,24 @@
+# Source files
+src/
+tsconfig.json
+
+# Development files
+*.log
+.env*
+.DS_Store
+
+# Build artifacts (keep dist/)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.ts
+*.spec.ts

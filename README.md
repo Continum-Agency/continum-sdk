@@ -1,4 +1,3 @@
-```markdown
 # @continum/sdk
 
 > Zero-latency compliance auditing for every LLM call in your application
@@ -37,13 +36,12 @@ const response = await continum.llm.openai.gpt_4o.chat({
 
 ## Documentation
 
-- [Setup Guide](https://docs.continum.io/setup)
-- [API Reference](https://docs.continum.io/api)
-- [Examples](https://docs.continum.io/examples)
+- [Setup Guide](https://docs.continum.co/setup)
+- [API Reference](https://docs.continum.co/api)
+- [Examples](https://docs.continum.co/examples)
 
 ## Support
 
-- [GitHub Issues](https://github.com/YOUR_USERNAME/continum/issues)
-- [Documentation](https://docs.continum.io)
-- Email: support@continum.io
-```
+- [GitHub Issues](https://github.com/Continum-Agency/continum-sdk/issues)
+- [Documentation](https://docs.continum.co)
+- Email: support@continum.co
