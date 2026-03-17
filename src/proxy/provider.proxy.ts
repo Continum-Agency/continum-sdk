@@ -1,8 +1,10 @@
 import type { IProviderDriver, CallOptions, ChatResult, Provider } from '../types';
 import { MirrorClient } from '../mirror/mirror.client';
+import { GuardianClient } from '../guardian/guardian.client';
 
 /**
  * Maps snake_case model names typed by developers to the actual API model IDs.
+ * Maintains Next.js-like developer experience - built on LLM APIs like Next.js on React
  *
  * Pattern: underscores become hyphens for most providers.
  * Special cases are handled here explicitly.
@@ -70,7 +72,9 @@ export class ProviderProxy {
     private readonly provider: Provider,
     private readonly driver:   IProviderDriver,
     private readonly mirror:   MirrorClient,
+    private readonly guardian: GuardianClient,
     private readonly defaultSandbox: string,
+    private readonly guardianMode: 'DETONATION' | 'GUARDIAN' | 'DUAL',
     private readonly onCall: (provider: Provider, model: string, params: CallOptions, result: ChatResult) => void,
   ) {}
 
@@ -95,18 +99,62 @@ export class ProviderProxy {
 
         return {
           chat: async (params: CallOptions): Promise<ChatResult> => {
-            // Phase 1: Make the actual LLM call — synchronous from the developer's perspective
-            const result = await driver.call(modelId, params);
-
-            // Phase 2: Mirror to Continum sandbox — async, never blocks the response
             const sandbox = params.sandbox ?? defaultSandbox;
-            if (sandbox) {
-              mirror.fire(sandbox, params, result);
+            
+            // DUAL-MODE ARCHITECTURE:
+            // 1. DETONATION: Shadow audit (0ms latency) - for testing/monitoring
+            // 2. GUARDIAN: Pre-LLM protection - blocks PII before LLM sees it
+            // 3. DUAL: Both modes active
+            
+            if (this.guardianMode === 'GUARDIAN' || this.guardianMode === 'DUAL') {
+              // PRE-LLM GUARDIAN: Fast sync audit to protect against PII
+              const userInput = [...params.messages]
+                .reverse()
+                .find(m => m.role === 'user')?.content ?? '';
+              
+              const systemPrompt = params.systemPrompt ?? 
+                params.messages.find(m => m.role === 'system')?.content ?? '';
+              
+              // Fast PII detection (< 100ms) - local regex + ML model
+              const guardianResult = await this.guardian.scanPrompt({
+                userInput,
+                systemPrompt,
+                provider,
+                model: modelId,
+                sandbox
+              });
+              
+              // Block or redact if violations found
+              if (guardianResult.action === 'BLOCK') {
+                throw new Error(`Request blocked: ${guardianResult.reasoning}`);
+              }
+              
+              // Use redacted prompt if needed
+              if (guardianResult.action === 'REDACT') {
+                params = {
+                  ...params,
+                  messages: params.messages.map(msg => 
+                    msg.role === 'user' 
+                      ? { ...msg, content: guardianResult.cleanPrompt }
+                      : msg
+                  )
+                };
+              }
             }
-
-            // Phase 3: Notify SDK-level hook (for logging, metrics etc)
+            
+            // Phase 1: Make the actual LLM call with (possibly cleaned) prompt
+            const result = await driver.call(modelId, params);
+            
+            // Phase 2: DETONATION SANDBOX - Shadow audit (0ms latency impact)
+            if (this.guardianMode === 'DETONATION' || this.guardianMode === 'DUAL') {
+              if (sandbox) {
+                mirror.fire(sandbox, params, result);
+              }
+            }
+            
+            // Phase 3: Notify SDK-level hook
             onCall(provider, modelId, params, result);
-
+            
             return result;
           },
         };

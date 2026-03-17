@@ -43,7 +43,7 @@ export class AnthropicDriver implements IProviderDriver {
       throw new Error(`Anthropic error ${response.status}: ${JSON.stringify(err)}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // Extract text and thinking blocks from content array
     let content = '';

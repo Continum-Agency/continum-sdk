@@ -41,7 +41,7 @@ export class OpenAIDriver implements IProviderDriver {
       throw new Error(`OpenAI error ${response.status}: ${JSON.stringify(err)}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const choice = data.choices?.[0];
     const content = choice?.message?.content ?? '';
 

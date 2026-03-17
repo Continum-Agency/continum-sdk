@@ -41,6 +41,24 @@ export interface ContinumConfig {
   // Default sandbox slug — can be overridden per call
   defaultSandbox?: string;
 
+  // Operating mode
+  mode?: 'DETONATION' | 'GUARDIAN' | 'DUAL';
+  // DETONATION: Shadow audit only (0ms latency, for testing)
+  // GUARDIAN: Pre-LLM protection only (fast PII blocking)
+  // DUAL: Both modes active (recommended for production)
+
+  // Guardian configuration
+  guardianConfig?: {
+    blockHighRisk?: boolean;    // Block SSN, credit cards, etc.
+    redactMediumRisk?: boolean; // Redact emails, phones, etc.
+    localOnly?: boolean;        // Use only local patterns (fastest)
+    customPatterns?: Array<{    // Custom PII patterns
+      name: string;
+      pattern: RegExp;
+      riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+    }>;
+  };
+
   // Whether to throw if the mirror call fails (default: false — never block the user)
   strictMirror?: boolean;
 }

@@ -44,7 +44,7 @@ export class GeminiDriver implements IProviderDriver {
       throw new Error(`Gemini error ${response.status}: ${JSON.stringify(err)}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     return {

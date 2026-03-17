@@ -3,38 +3,55 @@ import { OpenAIDriver }    from './drivers/openai.driver';
 import { AnthropicDriver } from './drivers/anthropic.driver';
 import { GeminiDriver }    from './drivers/gemini.driver';
 import { MirrorClient }    from './mirror/mirror.client';
+import { GuardianClient }  from './guardian/guardian.client';
 import { ProviderProxy }   from './proxy/provider.proxy';
 
 const DEFAULT_ENDPOINT = 'https://api.continum.io';
 
 /**
- * Continum SDK
- *
- * The single entry point for all LLM access with built-in compliance auditing.
- * Developers replace their existing provider SDKs with this one import.
- *
- * Every call:
- *   1. Executes the LLM request directly on the developer's server (API keys stay local)
- *   2. Returns the response to the developer instantly
- *   3. Fires the compliance triplet to the Continum sandbox asynchronously
- *
+ * Continum SDK — The "Next.js" to the AI world's "React"
+ * 
+ * GOVERNED EXECUTION FRAMEWORK:
+ * Transforms raw, high-risk AI connections into structured, armored, compliant interactions.
+ * 
+ * THE INTERFACE: "Snake Case" Control Panel
+ * - Path: llm → provider → model → action
+ * - Look: llm.openai.gpt_5_4_thinking.chat() or llm.claude.haiku_4_5.chat()
+ * - Feel: Premium, organized hierarchy with perfect autocomplete
+ * 
+ * THE RELATIONSHIP: "Shadow Bodyguard"
+ * - Sovereignty-First Interceptor: Sits on YOUR server, manages AI relationships
+ * - Direct Execution: Your app talks to AI directly, you keep your API keys
+ * - Zero Latency: AI answers delivered instantly, no waiting for security checks
+ * - Shadow Fork: While user reads answer, SDK silently audits in background
+ * 
+ * THE BACKEND: "Detonation Chamber"
+ * - Stateless Sandbox: Every audit spawns a temporary, isolated environment
+ * - Vanishing Room: Exists only in RAM, vaporized after audit
+ * - The Signal: Returns simple "Safe" or "Danger" to your dashboard
+ * - Total Sovereignty: Raw data never stored, only compliance signals
+ * 
+ * VALUE PROPOSITION:
+ * | Fear           | Continum's Solution                                    |
+ * |----------------|-------------------------------------------------------|
+ * | Data Leaks     | Detonation Chamber: Raw data vanishes after audit    |
+ * | Trust/Privacy  | Sovereignty-First: You keep API keys, we audit       |
+ * | Compliance     | Framework: Automatic legal safety standards          |
+ * 
  * Usage:
  *   const continum = new Continum({
  *     continumKey: process.env.CONTINUM_KEY,
- *     openaiKey:   process.env.OPENAI_API_KEY,
- *     anthropicKey:process.env.ANTHROPIC_API_KEY,
- *     defaultSandbox: 'pii_strict',
+ *     openaiKey:   process.env.OPENAI_API_KEY,  // Stays on YOUR server
+ *     mode: 'SHADOW_BODYGUARD' // Pure shadow audit, 0ms latency
  *   });
- *
- *   // Snake case model access — IDE autocomplete works on any property
+ * 
+ *   // The organized filing cabinet approach:
  *   const response = await continum.llm.openai.gpt_5_4_thinking.chat({
  *     messages: [{ role: 'user', content: 'Hello' }]
  *   });
- *
- *   const fast = await continum.llm.claude.haiku_4_5.chat({
- *     messages: [...],
- *     sandbox: 'bias_detection',   // override default sandbox per call
- *   });
+ *   // ✅ User gets response instantly (Direct Execution)
+ *   // ✅ Shadow Fork audits in Detonation Chamber
+ *   // ✅ Compliance signal appears in dashboard
  */
 export class Continum {
   public readonly llm: {
@@ -45,6 +62,7 @@ export class Continum {
   };
 
   private readonly mirror: MirrorClient;
+  private readonly guardian: GuardianClient;
   private readonly config: ContinumConfig;
 
   constructor(config: ContinumConfig) {
@@ -53,15 +71,20 @@ export class Continum {
       config.apiEndpoint ?? DEFAULT_ENDPOINT,
       config.continumKey,
     );
+    this.guardian = new GuardianClient(
+      config.apiEndpoint ?? DEFAULT_ENDPOINT,
+      config.continumKey,
+    );
 
     const defaultSandbox = config.defaultSandbox ?? '';
+    const mode = config.mode ?? 'SHADOW_BODYGUARD'; // Default to pure shadow audit
 
     this.llm = {
-      openai: this.buildProxy('openai', new OpenAIDriver(config.openaiKey ?? ''), defaultSandbox),
+      openai: this.buildProxy('openai', new OpenAIDriver(config.openaiKey ?? ''), defaultSandbox, mode),
       // claude and anthropic are aliases — both access Anthropic's API
-      claude:    this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox),
-      anthropic: this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox),
-      gemini:    this.buildProxy('gemini', new GeminiDriver(config.geminiKey ?? ''), defaultSandbox),
+      claude:    this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox, mode),
+      anthropic: this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox, mode),
+      gemini:    this.buildProxy('gemini', new GeminiDriver(config.geminiKey ?? ''), defaultSandbox, mode),
     };
   }
 
@@ -69,12 +92,19 @@ export class Continum {
     provider: Provider,
     driver: any,
     defaultSandbox: string,
+    mode: 'DETONATION' | 'GUARDIAN' | 'DUAL' | 'SHADOW_BODYGUARD'
   ) {
+    // Convert legacy mode names to current architecture
+    const normalizedMode: 'DETONATION' | 'GUARDIAN' | 'DUAL' = 
+      mode === 'SHADOW_BODYGUARD' ? 'DETONATION' : mode;
+    
     return new ProviderProxy(
       provider,
       driver,
       this.mirror,
+      this.guardian,
       defaultSandbox,
+      normalizedMode,
       this.onCall.bind(this),
     ).build();
   }
@@ -86,11 +116,31 @@ export class Continum {
   }
 
   /**
-   * Manually fire an audit triplet to a sandbox.
-   * Useful when you've already called an LLM outside the SDK
-   * and want to audit the interaction retroactively.
+   * Manually scan a prompt for PII before sending to LLM
+   * Useful for custom validation flows
    */
-  audit(
+  async scanPrompt(
+    prompt: string,
+    options?: {
+      sandbox?: string;
+      provider?: string;
+      model?: string;
+    }
+  ) {
+    return this.guardian.scanPrompt({
+      userInput: prompt,
+      systemPrompt: '',
+      provider: options?.provider ?? 'openai',
+      model: options?.model ?? 'gpt-4o',
+      sandbox: options?.sandbox ?? this.config.defaultSandbox ?? 'default'
+    });
+  }
+
+  /**
+   * Shadow Bodyguard Audit - The core of the Governed Execution Framework
+   * Retroactive analysis in the Detonation Chamber (Stateless Sandbox)
+   */
+  shadowAudit(
     sandbox: string,
     triplet: {
       provider:     string;
