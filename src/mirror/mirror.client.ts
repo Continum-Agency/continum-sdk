@@ -32,13 +32,18 @@ export class MirrorClient {
     params: CallOptions,
     result: ChatResult,
   ): void {
+    const systemMessage = params.messages.find(m => m.role === 'system');
     const systemPrompt = params.systemPrompt
-      ?? params.messages.find(m => m.role === 'system')?.content
+      ?? (typeof systemMessage?.content === 'string' ? systemMessage.content : '')
       ?? '';
 
-    const userInput = [...params.messages]
+    const userMessage = [...params.messages]
       .reverse()
-      .find(m => m.role === 'user')?.content ?? '';
+      .find(m => m.role === 'user');
+    
+    const userInput = typeof userMessage?.content === 'string'
+      ? userMessage.content
+      : JSON.stringify(userMessage?.content ?? '');
 
     const payload: MirrorPayload = {
       sandboxSlug,

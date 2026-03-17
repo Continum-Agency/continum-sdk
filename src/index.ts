@@ -16,7 +16,7 @@ const DEFAULT_ENDPOINT = 'https://api.continum.io';
  * 
  * THE INTERFACE: "Snake Case" Control Panel
  * - Path: llm → provider → model → action
- * - Look: llm.openai.gpt_5_4_thinking.chat() or llm.claude.haiku_4_5.chat()
+ * - Look: llm.openai.gpt_5.chat() or llm.claude.opus_4_6.chat()
  * - Feel: Premium, organized hierarchy with perfect autocomplete
  * 
  * THE RELATIONSHIP: "Shadow Bodyguard"
@@ -31,27 +31,40 @@ const DEFAULT_ENDPOINT = 'https://api.continum.io';
  * - The Signal: Returns simple "Safe" or "Danger" to your dashboard
  * - Total Sovereignty: Raw data never stored, only compliance signals
  * 
- * VALUE PROPOSITION:
- * | Fear           | Continum's Solution                                    |
- * |----------------|-------------------------------------------------------|
- * | Data Leaks     | Detonation Chamber: Raw data vanishes after audit    |
- * | Trust/Privacy  | Sovereignty-First: You keep API keys, we audit       |
- * | Compliance     | Framework: Automatic legal safety standards          |
+ * UNIFIED MODE:
+ * - Guardian (Pre-LLM): Blocks/redacts PII before LLM sees it
+ * - Direct Execution: Full LLM call with all features (vision, streaming, tools)
+ * - Detonation (Post-LLM): Shadow audit in background
+ * - All three happen automatically in one seamless flow
  * 
  * Usage:
  *   const continum = new Continum({
  *     continumKey: process.env.CONTINUM_KEY,
- *     openaiKey:   process.env.OPENAI_API_KEY,  // Stays on YOUR server
- *     mode: 'SHADOW_BODYGUARD' // Pure shadow audit, 0ms latency
+ *     apiKeys: {
+ *       openai: process.env.OPENAI_API_KEY,      // Optional: only if using OpenAI
+ *       anthropic: process.env.ANTHROPIC_API_KEY, // Optional: only if using Anthropic
+ *       gemini: process.env.GEMINI_API_KEY        // Optional: only if using Gemini
+ *     }
  *   });
  * 
- *   // The organized filing cabinet approach:
- *   const response = await continum.llm.openai.gpt_5_4_thinking.chat({
- *     messages: [{ role: 'user', content: 'Hello' }]
+ *   // Full LLM features supported:
+ *   const response = await continum.llm.openai.gpt_5.chat({
+ *     messages: [
+ *       { 
+ *         role: 'user', 
+ *         content: [
+ *           { type: 'text', text: 'What is in this image?' },
+ *           { type: 'image_url', image_url: 'https://...' }
+ *         ]
+ *       }
+ *     ],
+ *     reasoning_effort: 'high',  // For thinking models
+ *     tools: [...],              // Function calling
+ *     stream: true               // Streaming responses
  *   });
- *   // ✅ User gets response instantly (Direct Execution)
- *   // ✅ Shadow Fork audits in Detonation Chamber
- *   // ✅ Compliance signal appears in dashboard
+ *   // ✅ Guardian checks for PII
+ *   // ✅ Full LLM call with all features
+ *   // ✅ Detonation audits in background
  */
 export class Continum {
   public readonly llm: {
@@ -67,44 +80,51 @@ export class Continum {
 
   constructor(config: ContinumConfig) {
     this.config = config;
-    this.mirror = new MirrorClient(
-      config.apiEndpoint ?? DEFAULT_ENDPOINT,
-      config.continumKey,
-    );
-    this.guardian = new GuardianClient(
-      config.apiEndpoint ?? DEFAULT_ENDPOINT,
-      config.continumKey,
-    );
+    
+    // Hardcoded endpoint - no longer configurable
+    const endpoint = DEFAULT_ENDPOINT;
+    
+    this.mirror = new MirrorClient(endpoint, config.continumKey);
+    this.guardian = new GuardianClient(endpoint, config.continumKey);
 
     const defaultSandbox = config.defaultSandbox ?? '';
-    const mode = config.mode ?? 'SHADOW_BODYGUARD'; // Default to pure shadow audit
+    
+    // Resolve API keys from unified or legacy format
+    const openaiKey = config.apiKeys?.openai ?? config.openaiKey ?? '';
+    const anthropicKey = config.apiKeys?.anthropic ?? config.anthropicKey ?? '';
+    const geminiKey = config.apiKeys?.gemini ?? config.geminiKey ?? '';
 
-    this.llm = {
-      openai: this.buildProxy('openai', new OpenAIDriver(config.openaiKey ?? ''), defaultSandbox, mode),
-      // claude and anthropic are aliases — both access Anthropic's API
-      claude:    this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox, mode),
-      anthropic: this.buildProxy('anthropic', new AnthropicDriver(config.anthropicKey ?? ''), defaultSandbox, mode),
-      gemini:    this.buildProxy('gemini', new GeminiDriver(config.geminiKey ?? ''), defaultSandbox, mode),
-    };
+    // Build proxies only for providers with API keys
+    const llm: any = {};
+    
+    if (openaiKey) {
+      llm.openai = this.buildProxy('openai', new OpenAIDriver(openaiKey), defaultSandbox);
+    }
+    
+    if (anthropicKey) {
+      llm.claude = this.buildProxy('anthropic', new AnthropicDriver(anthropicKey), defaultSandbox);
+      llm.anthropic = llm.claude; // Alias
+    }
+    
+    if (geminiKey) {
+      llm.gemini = this.buildProxy('gemini', new GeminiDriver(geminiKey), defaultSandbox);
+    }
+    
+    this.llm = llm;
   }
 
   private buildProxy(
     provider: Provider,
     driver: any,
-    defaultSandbox: string,
-    mode: 'DETONATION' | 'GUARDIAN' | 'DUAL' | 'SHADOW_BODYGUARD'
+    defaultSandbox: string
   ) {
-    // Convert legacy mode names to current architecture
-    const normalizedMode: 'DETONATION' | 'GUARDIAN' | 'DUAL' = 
-      mode === 'SHADOW_BODYGUARD' ? 'DETONATION' : mode;
-    
     return new ProviderProxy(
       provider,
       driver,
       this.mirror,
       this.guardian,
       defaultSandbox,
-      normalizedMode,
+      this.config,
       this.onCall.bind(this),
     ).build();
   }

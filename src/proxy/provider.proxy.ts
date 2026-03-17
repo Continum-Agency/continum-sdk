@@ -1,4 +1,4 @@
-import type { IProviderDriver, CallOptions, ChatResult, Provider } from '../types';
+import type { IProviderDriver, CallOptions, ChatResult, Provider, ContinumConfig } from '../types';
 import { MirrorClient } from '../mirror/mirror.client';
 import { GuardianClient } from '../guardian/guardian.client';
 
@@ -10,12 +10,13 @@ import { GuardianClient } from '../guardian/guardian.client';
  * Special cases are handled here explicitly.
  *
  * Examples:
- *   gpt_5_4_thinking   → gpt-5.4-thinking
- *   gpt_4o             → gpt-4o
- *   opus_4_6           → claude-opus-4-6
- *   haiku_4_5          → claude-haiku-4-5-20251001
- *   sonnet_4_6         → claude-sonnet-4-6
- *   gemini_2_5_pro     → gemini-2.5-pro
+ *   gpt_5   → gpt-5
+ *   gpt_4o  → gpt-4o
+ *   o3      → o3
+ *   opus_4_6   → claude-opus-4-6
+ *   haiku_4_5  → claude-haiku-4-5-20251001
+ *   sonnet_4_6 → claude-sonnet-4-6
+ *   gemini_2_5_pro → gemini-2.5-pro
  */
 function resolveModelId(provider: Provider, snakeKey: string): string {
   const hyphenated = snakeKey.replace(/_/g, '-');
@@ -48,8 +49,6 @@ function resolveModelId(provider: Provider, snakeKey: string): string {
   // OpenAI: dots for version numbers
   if (provider === 'openai') {
     const openaiMap: Record<string, string> = {
-      'gpt-5-4-thinking':  'gpt-5.4-thinking',
-      'gpt-5-3-codex':     'gpt-5.3-codex',
       'gpt-5':             'gpt-5',
       'gpt-4o':            'gpt-4o',
       'gpt-4-turbo':       'gpt-4-turbo',
@@ -74,7 +73,7 @@ export class ProviderProxy {
     private readonly mirror:   MirrorClient,
     private readonly guardian: GuardianClient,
     private readonly defaultSandbox: string,
-    private readonly guardianMode: 'DETONATION' | 'GUARDIAN' | 'DUAL',
+    private readonly config: ContinumConfig,
     private readonly onCall: (provider: Provider, model: string, params: CallOptions, result: ChatResult) => void,
   ) {}
 
@@ -83,7 +82,7 @@ export class ProviderProxy {
    * and returns a chat() method bound to that resolved model.
    *
    * Usage:
-   *   continum.llm.openai.gpt_5_4_thinking.chat({ messages: [...] })
+   *   continum.llm.openai.gpt_5.chat({ messages: [...] })
    *   continum.llm.claude.opus_4_6.chat({ messages: [...] })
    *   continum.llm.gemini.gemini_2_5_pro.chat({ messages: [...] })
    */
@@ -93,66 +92,100 @@ export class ProviderProxy {
         const modelId = resolveModelId(this.provider, property);
         const driver  = this.driver;
         const mirror  = this.mirror;
+        const guardian = this.guardian;
         const defaultSandbox = this.defaultSandbox;
         const provider = this.provider;
         const onCall = this.onCall;
+        const config = this.config;
 
         return {
           chat: async (params: CallOptions): Promise<ChatResult> => {
             const sandbox = params.sandbox ?? defaultSandbox;
             
-            // DUAL-MODE ARCHITECTURE:
-            // 1. DETONATION: Shadow audit (0ms latency) - for testing/monitoring
-            // 2. GUARDIAN: Pre-LLM protection - blocks PII before LLM sees it
-            // 3. DUAL: Both modes active
+            // UNIFIED MODE: Guardian → LLM → Detonation (all automatic)
             
-            if (this.guardianMode === 'GUARDIAN' || this.guardianMode === 'DUAL') {
-              // PRE-LLM GUARDIAN: Fast sync audit to protect against PII
-              const userInput = [...params.messages]
+            // Phase 1: GUARDIAN (Pre-LLM Protection)
+            const guardianEnabled = config.guardianConfig?.enabled !== false && !params.skipGuardian;
+            
+            if (guardianEnabled) {
+              // Extract user input (handle both string and multimodal content)
+              const userMessage = [...params.messages]
                 .reverse()
-                .find(m => m.role === 'user')?.content ?? '';
+                .find(m => m.role === 'user');
               
+              const userInput = typeof userMessage?.content === 'string' 
+                ? userMessage.content
+                : JSON.stringify(userMessage?.content ?? '');
+              
+              const systemMessage = params.messages.find(m => m.role === 'system');
               const systemPrompt = params.systemPrompt ?? 
-                params.messages.find(m => m.role === 'system')?.content ?? '';
+                (typeof systemMessage?.content === 'string'
+                  ? systemMessage.content
+                  : '') ?? '';
               
-              // Fast PII detection (< 100ms) - local regex + ML model
-              const guardianResult = await this.guardian.scanPrompt({
-                userInput,
-                systemPrompt,
-                provider,
-                model: modelId,
-                sandbox
-              });
-              
-              // Block or redact if violations found
-              if (guardianResult.action === 'BLOCK') {
-                throw new Error(`Request blocked: ${guardianResult.reasoning}`);
-              }
-              
-              // Use redacted prompt if needed
-              if (guardianResult.action === 'REDACT') {
-                params = {
-                  ...params,
-                  messages: params.messages.map(msg => 
-                    msg.role === 'user' 
-                      ? { ...msg, content: guardianResult.cleanPrompt }
-                      : msg
-                  )
-                };
+              try {
+                // Fast PII detection (< 100ms)
+                const guardianResult = await guardian.scanPrompt({
+                  userInput,
+                  systemPrompt,
+                  provider,
+                  model: modelId,
+                  sandbox
+                });
+                
+                // Block high-risk PII if configured
+                if (guardianResult.action === 'BLOCK' && config.guardianConfig?.blockHighRisk !== false) {
+                  throw new Error(`[Continum Guardian] Request blocked: ${guardianResult.reasoning}`);
+                }
+                
+                // Redact medium-risk PII if configured
+                if (guardianResult.action === 'REDACT' && config.guardianConfig?.redactMediumRisk !== false) {
+                  params = {
+                    ...params,
+                    messages: params.messages.map(msg => {
+                      if (msg.role === 'user') {
+                        if (typeof msg.content === 'string') {
+                          return { ...msg, content: guardianResult.cleanPrompt };
+                        }
+                        // For multimodal, only redact text parts
+                        return {
+                          ...msg,
+                          content: Array.isArray(msg.content)
+                            ? msg.content.map(part => 
+                                part.type === 'text' || part.type === 'input_text'
+                                  ? { ...part, text: guardianResult.cleanPrompt }
+                                  : part
+                              )
+                            : msg.content
+                        };
+                      }
+                      return msg;
+                    })
+                  };
+                }
+              } catch (error) {
+                // Fail-safe: if guardian fails, allow call (unless strict mode)
+                if (config.strictMirror) throw error;
+                console.warn('[Continum Guardian] Scan failed, allowing call:', error);
               }
             }
             
-            // Phase 1: Make the actual LLM call with (possibly cleaned) prompt
+            // Phase 2: LLM CALL (Full feature support - vision, streaming, tools, etc.)
             const result = await driver.call(modelId, params);
             
-            // Phase 2: DETONATION SANDBOX - Shadow audit (0ms latency impact)
-            if (this.guardianMode === 'DETONATION' || this.guardianMode === 'DUAL') {
-              if (sandbox) {
+            // Phase 3: DETONATION (Shadow Audit)
+            const detonationEnabled = config.detonationConfig?.enabled !== false && !params.skipDetonation;
+            
+            if (detonationEnabled && sandbox) {
+              try {
                 mirror.fire(sandbox, params, result);
+              } catch (error) {
+                // Never block user for audit failures
+                console.warn('[Continum Detonation] Shadow audit failed:', error);
               }
             }
             
-            // Phase 3: Notify SDK-level hook
+            // Phase 4: Notify SDK-level hook
             onCall(provider, modelId, params, result);
             
             return result;
