@@ -4,9 +4,19 @@
 
 ## Quick Start
 
+### Installation
+
 ```bash
+# Install the Continum SDK
 npm install @continum/sdk
+
+# Install LLM providers you plan to use (choose one or more)
+npm install openai                    # For OpenAI GPT models
+npm install @anthropic-ai/sdk         # For Claude models  
+npm install @google/generative-ai     # For Gemini models
 ```
+
+### Usage
 
 ```typescript
 import { Continum } from '@continum/sdk';
