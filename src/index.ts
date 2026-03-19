@@ -6,7 +6,7 @@ import { MirrorClient }    from './mirror/mirror.client';
 import { GuardianClient }  from './guardian/guardian.client';
 import { ProviderProxy }   from './proxy/provider.proxy';
 
-const DEFAULT_ENDPOINT = 'https://api.continum.io';
+const DEFAULT_ENDPOINT = 'https://api.continum.co';
 
 /**
  * Continum SDK — The "Next.js" to the AI world's "React"

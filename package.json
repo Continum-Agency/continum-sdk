@@ -1,6 +1,6 @@
 {
   "name": "@continum/sdk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Zero-latency compliance auditing for every LLM call in your application",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,7 @@
   ],
   "author": "Continum Team",
   "license": "MIT",
-  "homepage": "https://continum.io",
+  "homepage": "https://continum.co",
   "repository": {
     "type": "git",
     "url": "https://github.com/Continum-Agency/continum-sdk.git",
@@ -57,9 +57,15 @@
     "@google/generative-ai": "^0.15.0"
   },
   "peerDependenciesMeta": {
-    "openai": { "optional": true },
-    "@anthropic-ai/sdk": { "optional": true },
-    "@google/generative-ai": { "optional": true }
+    "openai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@google/generative-ai": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "access": "public"
