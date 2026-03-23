@@ -1,6 +1,6 @@
 # @continum/sdk
 
-> Zero-latency compliance auditing for every LLM call in your application
+> Governed Execution Framework for LLM Applications
 
 ## Quick Start
 
@@ -33,14 +33,112 @@ const continum = new Continum({
 const response = await continum.llm.openai.gpt_4o.chat({
   messages: [{ role: 'user', content: 'Hello world' }]
 });
+// ✅ Guardian checks for PII (pre-execution)
 // ✅ User gets response instantly
-// ✅ Compliance audit runs in background
+// ✅ Shadow Audit runs in background (post-execution)
+```
+
+## Architecture
+
+### Two-Tier Protection System
+
+**Guardian (Pre-Execution)**
+- Blocks or redacts threats BEFORE they reach the LLM
+- < 100ms latency with local pattern matching
+- Protects against: Prompt Injection, Data Exfiltration, PII leakage
+- Action: BLOCK (high risk) or REDACT (medium risk)
+
+**Shadow Audit (Post-Execution)**
+- Monitors and logs AFTER LLM responds
+- Zero user-facing latency (fire-and-forget)
+- Detects: Bias, Hallucinations, Compliance violations, Security issues
+- Action: LOG and ALERT (never blocks users)
+
+### Sandbox Types
+
+#### Guardian Sandboxes (Pre-Execution)
+- `PROMPT_INJECTION` - Detect and block prompt injection attacks
+- `DATA_EXFILTRATION` - Prevent sensitive data leakage
+- `PII_DETECTION` - Identify and redact personal information
+- `CONTENT_POLICY` - Enforce content guidelines
+
+#### Shadow Audit Sandboxes (Post-Execution)
+- `BIAS_DETECTION` - Monitor for biased outputs
+- `SECURITY_AUDIT` - Audit security compliance
+- `REGULATORY_COMPLIANCE` - Track regulatory adherence
+- `AGENT_SAFETY` - Monitor agent behavior
+- `HALLUCINATION_DETECTION` - Detect factual inaccuracies
+- `FINANCIAL_COMPLIANCE` - Ensure financial regulations
+- `LEGAL_COMPLIANCE` - Monitor legal compliance
+- `MULTI_TURN_ATTACK` - Detect multi-step attacks
+- `SUPPLY_CHAIN_INTEGRITY` - Verify supply chain security
+- `FULL_SPECTRUM` - Comprehensive monitoring
+- `CUSTOM` - Custom audit rules
+
+## Advanced Configuration
+
+### Guardian Configuration
+
+```typescript
+const continum = new Continum({
+  continumKey: process.env.CONTINUM_KEY!,
+  apiKeys: { openai: process.env.OPENAI_API_KEY },
+  guardianConfig: {
+    enabled: true,              // Enable pre-LLM protection
+    blockHighRisk: true,        // Block SSN, credit cards, etc.
+    redactMediumRisk: true,     // Redact emails, phones, etc.
+    localOnly: false,           // Use remote ML for complex cases
+    customPatterns: [
+      {
+        name: 'INTERNAL_ID',
+        pattern: /EMP-\d{6}/g,
+        riskLevel: 'HIGH'
+      }
+    ]
+  }
+});
+```
+
+### Shadow Audit Configuration
+
+```typescript
+const continum = new Continum({
+  continumKey: process.env.CONTINUM_KEY!,
+  apiKeys: { openai: process.env.OPENAI_API_KEY },
+  detonationConfig: {
+    enabled: true  // Enable shadow auditing
+  },
+  strictMirror: false  // Never block users on audit failures
+});
+```
+
+### Per-Call Overrides
+
+```typescript
+// Skip Guardian for this specific call
+const response = await continum.llm.openai.gpt_4o.chat({
+  messages: [{ role: 'user', content: 'Hello' }],
+  skipGuardian: true
+});
+
+// Skip Shadow Audit for this specific call
+const response = await continum.llm.openai.gpt_4o.chat({
+  messages: [{ role: 'user', content: 'Hello' }],
+  skipDetonation: true
+});
+
+// Use a different sandbox for this call
+const response = await continum.llm.openai.gpt_4o.chat({
+  messages: [{ role: 'user', content: 'Hello' }],
+  sandbox: 'strict_pii_detection'
+});
 ```
 
 ## Features
 
 - **Zero Latency**: Users get responses instantly
 - **Privacy First**: Your API keys never leave your server
+- **Dual Protection**: Guardian blocks threats, Shadow Audit monitors
 - **Comprehensive Detection**: PII, bias, security, prompt injection
 - **Real-time Dashboard**: Monitor violations and compliance
 
@@ -54,4 +152,4 @@ const response = await continum.llm.openai.gpt_4o.chat({
 
 - [GitHub Issues](https://github.com/Continum-Agency/continum-sdk/issues)
 - [Documentation](https://docs.continum.co)
-- Email: support@continum.co"# Updated" 
+- Email: support@continum.co 
