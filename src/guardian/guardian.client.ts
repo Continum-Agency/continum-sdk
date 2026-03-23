@@ -92,8 +92,9 @@ export class GuardianClient {
       const localResult = this.scanLocalPatterns(request.userInput);
       
       if (localResult.detectedEntities.length > 0) {
-        // Found PII locally - apply redaction
-        return this.buildGuardianResult(localResult, request);
+        // Found PII locally - apply action based on sandbox config
+        // Note: guardianAction should come from sandbox config in production
+        return this.buildGuardianResult(localResult, request, 'REDACT_AND_CONTINUE');
       }
       
       // Tier 2: Remote ML scan for complex cases (optional)
@@ -188,7 +189,8 @@ export class GuardianClient {
 
   private buildGuardianResult(
     localResult: { detectedEntities: DetectedEntity[] },
-    request: GuardianScanRequest
+    request: GuardianScanRequest,
+    guardianAction: 'BLOCK_ON_DETECT' | 'REDACT_AND_CONTINUE' | 'ALLOW_ALL' = 'REDACT_AND_CONTINUE'
   ): GuardianResult {
     let cleanPrompt = request.userInput;
     const violations: string[] = [];
@@ -205,13 +207,22 @@ export class GuardianClient {
       reasoningParts.push(`${entity.type.toLowerCase()} ${entity.redactedValue} detected`);
     }
     
-    // Determine action based on entity types
-    const hasHighRiskPII = localResult.detectedEntities.some(e => 
-      ['SSN', 'CREDIT_CARD', 'PASSPORT', 'HEALTH_ID'].includes(e.type)
-    );
+    // Determine action based on guardianAction configuration
+    let action: 'ALLOW' | 'REDACT' | 'BLOCK' = 'ALLOW';
+    
+    if (guardianAction === 'ALLOW_ALL') {
+      // Guardian disabled - allow everything
+      action = 'ALLOW';
+    } else if (guardianAction === 'BLOCK_ON_DETECT') {
+      // Block if any PII detected
+      action = 'BLOCK';
+    } else if (guardianAction === 'REDACT_AND_CONTINUE') {
+      // Redact PII and continue with LLM call
+      action = 'REDACT';
+    }
     
     return {
-      action: hasHighRiskPII ? 'BLOCK' : 'REDACT',
+      action,
       violations,
       reasoning: reasoningParts.join(', '),
       cleanPrompt,

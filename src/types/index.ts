@@ -68,8 +68,9 @@ export interface ContinumConfig {
   // Guardian configuration for PII protection
   guardianConfig?: {
     enabled?: boolean;          // Enable pre-LLM protection (default: true)
-    blockHighRisk?: boolean;    // Block SSN, credit cards, etc. (default: true)
-    redactMediumRisk?: boolean; // Redact emails, phones, etc. (default: true)
+    action?: 'BLOCK_ON_DETECT' | 'REDACT_AND_CONTINUE' | 'ALLOW_ALL'; // Guardian action mode
+    blockHighRisk?: boolean;    // Block SSN, credit cards, etc. (default: true) - DEPRECATED: use action instead
+    redactMediumRisk?: boolean; // Redact emails, phones, etc. (default: true) - DEPRECATED: use action instead
     localOnly?: boolean;        // Use only local patterns (fastest)
     customPatterns?: Array<{    // Custom PII patterns
       name: string;
