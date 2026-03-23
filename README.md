@@ -85,8 +85,8 @@ const continum = new Continum({
   apiKeys: { openai: process.env.OPENAI_API_KEY },
   guardianConfig: {
     enabled: true,              // Enable pre-LLM protection
-    blockHighRisk: true,        // Block SSN, credit cards, etc.
-    redactMediumRisk: true,     // Redact emails, phones, etc.
+    action: 'REDACT_AND_CONTINUE', // Guardian action mode
+    // Options: 'BLOCK_ON_DETECT', 'REDACT_AND_CONTINUE', 'ALLOW_ALL'
     localOnly: false,           // Use remote ML for complex cases
     customPatterns: [
       {
@@ -98,6 +98,12 @@ const continum = new Continum({
   }
 });
 ```
+
+#### Guardian Action Modes
+
+- **BLOCK_ON_DETECT**: Block request immediately if any PII is detected
+- **REDACT_AND_CONTINUE**: Redact PII and continue with LLM call (default)
+- **ALLOW_ALL**: Disable Guardian protection (allow everything)
 
 ### Shadow Audit Configuration
 
