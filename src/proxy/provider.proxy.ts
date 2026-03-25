@@ -29,7 +29,7 @@ function resolveModelId(provider: Provider, snakeKey: string): string {
       'haiku-4-5':         'claude-haiku-4-5-20251001',
       'opus-4':            'claude-opus-4-5',
       'sonnet-4':          'claude-sonnet-4-5',
-      'haiku-3-5':         'claude-haiku-3-5-20241022',
+      'haiku-3-5':         'claude-3-5-haiku-20241022',
       'sonnet-3-7':        'claude-sonnet-3-7-20250219',
       'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
     };

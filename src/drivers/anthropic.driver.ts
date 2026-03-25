@@ -8,12 +8,25 @@ export class AnthropicDriver implements IProviderDriver {
   }
 
   async call(model: string, params: CallOptions): Promise<ChatResult> {
-    const isThinkingModel =
-      model.includes('opus') || model.includes('sonnet-4') || model.includes('claude-4');
+    // Claude 3.7 Sonnet and Claude 3 Opus are the primary thinking-capable models
+    const isThinkingModel = 
+      model.includes('claude-3-7') || 
+      model.includes('sonnet-3-7') || 
+      model.includes('opus');
+
+    // 1. MINIMUM REQUIREMENT: budget_tokens must be at least 1024
+    const thinkingBudget = isThinkingModel ? 1024 : 0;
+    
+    // 2. TOTAL TOKENS: must be strictly greater than thinkingBudget
+    // We'll set a default of 4096, but ensure it's at least budget + 1024
+    let maxTokens = params.maxTokens ?? 4096;
+    if (isThinkingModel && maxTokens <= thinkingBudget) {
+      maxTokens = thinkingBudget + 2048; 
+    }
 
     const body: Record<string, any> = {
       model,
-      max_tokens: params.maxTokens ?? 4096,
+      max_tokens: maxTokens,
       messages: params.messages.map(m => ({ role: m.role, content: m.content })),
     };
 
@@ -21,9 +34,12 @@ export class AnthropicDriver implements IProviderDriver {
       body.system = params.systemPrompt;
     }
 
-    // Enable extended thinking for capable models
+    // Handle Extended Thinking logic
     if (isThinkingModel) {
-      body.thinking = { type: 'enabled', budget_tokens: 8000 };
+      body.thinking = { 
+        type: 'enabled', 
+        budget_tokens: thinkingBudget 
+      };
     } else {
       body.temperature = params.temperature ?? 0.7;
     }
@@ -34,6 +50,8 @@ export class AnthropicDriver implements IProviderDriver {
         'Content-Type': 'application/json',
         'x-api-key': this.apiKey,
         'anthropic-version': '2023-06-01',
+        // Required for Claude 3.7 Sonnet extended thinking features
+        'anthropic-beta': 'output-128k-2025-02-19',
       },
       body: JSON.stringify(body),
     });
@@ -61,8 +79,8 @@ export class AnthropicDriver implements IProviderDriver {
       content,
       model,
       provider: 'anthropic',
-      promptTokens:  data.usage?.input_tokens  ?? 0,
-      outputTokens:  data.usage?.output_tokens ?? 0,
+      promptTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
       thinkingBlock,
       raw: data,
     };

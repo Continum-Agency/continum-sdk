@@ -2,6 +2,14 @@
 
 > Governed Execution Framework for LLM Applications
 
+**Current Version**: 0.0.5
+
+**Latest Changes**:
+- Fixed `max_tokens` validation for Anthropic thinking models
+- Thinking budget set to 1000 tokens for better cost efficiency
+- SDK automatically adjusts `max_tokens` if too low (minimum 3048)
+- Improved handling of token limits for thinking models
+
 ## Quick Start
 
 ### Installation
@@ -24,18 +32,75 @@ import { Continum } from '@continum/sdk';
 const continum = new Continum({
   continumKey: process.env.CONTINUM_KEY!,
   apiKeys: {
-    openai: process.env.OPENAI_API_KEY
+    openai: process.env.OPENAI_API_KEY,
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    gemini: process.env.GEMINI_API_KEY
   },
   defaultSandbox: 'pii_protection'
 });
 
-// Make LLM calls with automatic compliance
+// OpenAI - use snake_case model names
 const response = await continum.llm.openai.gpt_4o.chat({
   messages: [{ role: 'user', content: 'Hello world' }]
 });
+
+// Anthropic - use model family names (opus, sonnet, haiku)
+const response2 = await continum.llm.anthropic.opus_4_6.chat({
+  messages: [{ role: 'user', content: 'Review this code' }]
+});
+// Also supports: sonnet_4_6, sonnet_4, haiku_4_5, haiku_3_5, sonnet_3_7
+// Legacy format also works: claude_3_5_sonnet
+
+// Gemini - use snake_case with underscores
+const response3 = await continum.llm.gemini.gemini_2_5_pro.chat({
+  messages: [{ role: 'user', content: 'Summarize this' }]
+});
+
 // ✅ Guardian checks for PII (pre-execution)
 // ✅ User gets response instantly
 // ✅ Shadow Audit runs in background (post-execution)
+```
+
+## Model Name Format
+
+The SDK uses snake_case model names that get automatically transformed to the correct API format:
+
+### Anthropic Models
+
+```typescript
+// Recommended format - use model family names
+continum.llm.anthropic.opus_4_6.chat()      // → claude-opus-4-6
+continum.llm.anthropic.sonnet_4_6.chat()    // → claude-sonnet-4-6
+continum.llm.anthropic.sonnet_4.chat()      // → claude-sonnet-4-5
+continum.llm.anthropic.haiku_4_5.chat()     // → claude-haiku-4-5-20251001
+continum.llm.anthropic.haiku_3_5.chat()     // → claude-haiku-3-5-20241022
+continum.llm.anthropic.sonnet_3_7.chat()    // → claude-sonnet-3-7-20250219
+
+// Legacy format also supported (v0.0.4+)
+continum.llm.anthropic.claude_3_5_sonnet.chat()  // → claude-3-5-sonnet-20241022
+
+// Alias: claude and anthropic are interchangeable
+continum.llm.claude.opus_4_6.chat()  // Same as anthropic.opus_4_6
+```
+
+### OpenAI Models
+
+```typescript
+continum.llm.openai.gpt_5.chat()       // → gpt-5
+continum.llm.openai.gpt_4o.chat()      // → gpt-4o
+continum.llm.openai.gpt_4_turbo.chat() // → gpt-4-turbo
+continum.llm.openai.o3.chat()          // → o3
+continum.llm.openai.o3_mini.chat()     // → o3-mini
+continum.llm.openai.o1.chat()          // → o1
+```
+
+### Gemini Models
+
+```typescript
+continum.llm.gemini.gemini_2_5_pro.chat()   // → gemini-2.5-pro
+continum.llm.gemini.gemini_2_5_flash.chat() // → gemini-2.5-flash
+continum.llm.gemini.gemini_2_0_flash.chat() // → gemini-2.0-flash
+continum.llm.gemini.gemini_1_5_pro.chat()   // → gemini-1.5-pro
 ```
 
 ## Architecture
