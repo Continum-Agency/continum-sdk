@@ -65,6 +65,10 @@ export interface ContinumConfig {
   // Default sandbox slug — can be overridden per call
   defaultSandbox?: string;
 
+  // Organization context (for team features)
+  organizationId?: string;
+  accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
+
   // Guardian configuration for PII protection
   guardianConfig?: {
     enabled?: boolean;          // Enable pre-LLM protection (default: true)
@@ -84,6 +88,23 @@ export interface ContinumConfig {
     enabled?: boolean;  // Enable shadow auditing (default: true)
   };
 
+  // Retry configuration for resilience
+  retryConfig?: {
+    enabled?: boolean;          // Enable automatic retries (default: true)
+    maxAttempts?: number;       // Max retry attempts (default: 3)
+    backoffMultiplier?: number; // Exponential backoff multiplier (default: 2)
+    initialDelayMs?: number;    // Initial retry delay (default: 1000)
+  };
+
+  // Provider fallback configuration
+  fallbackConfig?: {
+    enabled?: boolean;  // Enable provider fallback (default: false)
+    fallbackOrder?: Array<{
+      provider: Provider;
+      model: string;
+    }>;
+  };
+
   // Whether to throw if the mirror call fails (default: false — never block the user)
   strictMirror?: boolean;
 }
@@ -97,6 +118,18 @@ export interface CallOptions extends ChatParams {
   skipGuardian?: boolean;
   // Disable detonation for this specific call
   skipDetonation?: boolean;
+  // Disable retry for this specific call
+  skipRetry?: boolean;
+  // Runtime metadata for compliance tracking
+  metadata?: {
+    userId?: string;              // End user identifier
+    sessionId?: string;           // Session/conversation ID
+    applicationContext?: string;  // Where in app this call happened
+    userRole?: string;            // User's role/permissions
+    ipAddress?: string;           // User's IP (for geo-compliance)
+    tags?: string[];              // Custom tags for filtering
+    customFields?: Record<string, any>; // Extensible metadata
+  };
 }
 
 // ─── Driver interface ─────────────────────────────────────────────────────────

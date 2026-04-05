@@ -84,7 +84,7 @@ export class Continum {
     // Hardcoded endpoint - no longer configurable
     const endpoint = DEFAULT_ENDPOINT;
     
-    this.mirror = new MirrorClient(endpoint, config.continumKey);
+    this.mirror = new MirrorClient(endpoint, config.continumKey, config.organizationId);
     this.guardian = new GuardianClient(endpoint, config.continumKey);
 
     const defaultSandbox = config.defaultSandbox ?? '';
@@ -186,6 +186,97 @@ export class Continum {
         raw: null,
       },
     );
+  }
+
+  /**
+   * Batch LLM calls - Execute multiple LLM calls in parallel
+   * Useful for processing multiple prompts efficiently
+   */
+  async batchChat(
+    calls: Array<{
+      provider: 'openai' | 'anthropic' | 'gemini';
+      model: string;
+      params: CallOptions;
+    }>
+  ): Promise<ChatResult[]> {
+    return Promise.all(
+      calls.map(call => {
+        const providerProxy = this.llm[call.provider as keyof typeof this.llm];
+        if (!providerProxy) {
+          throw new Error(`Provider ${call.provider} not configured. Add API key to config.`);
+        }
+        return providerProxy[call.model].chat(call.params);
+      })
+    );
+  }
+
+  /**
+   * Smart LLM call with automatic retry and fallback
+   * Retries on transient errors and falls back to alternative providers
+   */
+  async smartChat(
+    provider: 'openai' | 'anthropic' | 'gemini',
+    model: string,
+    params: CallOptions
+  ): Promise<ChatResult> {
+    const retryConfig = this.config.retryConfig ?? {};
+    const maxAttempts = retryConfig.maxAttempts ?? 3;
+    const backoffMultiplier = retryConfig.backoffMultiplier ?? 2;
+    const initialDelayMs = retryConfig.initialDelayMs ?? 1000;
+    const retryEnabled = retryConfig.enabled !== false && !params.skipRetry;
+
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const providerProxy = this.llm[provider as keyof typeof this.llm];
+        if (!providerProxy) {
+          throw new Error(`Provider ${provider} not configured. Add API key to config.`);
+        }
+        return await providerProxy[model].chat(params);
+      } catch (error: any) {
+        lastError = error;
+        
+        // Don't retry on Guardian blocks or final attempt
+        if (error.message?.includes('Guardian blocked') || attempt === maxAttempts - 1) {
+          break;
+        }
+        
+        // Don't retry if disabled
+        if (!retryEnabled) {
+          break;
+        }
+        
+        // Exponential backoff
+        const delayMs = initialDelayMs * Math.pow(backoffMultiplier, attempt);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        
+        if (process.env.CONTINUM_DEBUG === 'true') {
+          console.log(`[Continum] Retry attempt ${attempt + 1}/${maxAttempts} after ${delayMs}ms`);
+        }
+      }
+    }
+    
+    // Try fallback providers if configured
+    if (this.config.fallbackConfig?.enabled && this.config.fallbackConfig.fallbackOrder) {
+      for (const fallback of this.config.fallbackConfig.fallbackOrder) {
+        try {
+          if (process.env.CONTINUM_DEBUG === 'true') {
+            console.log(`[Continum] Falling back to ${fallback.provider}/${fallback.model}`);
+          }
+          
+          const providerProxy = this.llm[fallback.provider as keyof typeof this.llm];
+          if (!providerProxy) continue;
+          
+          return await providerProxy[fallback.model].chat(params);
+        } catch (error) {
+          // Continue to next fallback
+          continue;
+        }
+      }
+    }
+    
+    throw lastError ?? new Error('All attempts failed');
   }
 }
 

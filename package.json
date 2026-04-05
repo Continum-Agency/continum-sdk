@@ -9,6 +9,20 @@
     "README.md",
     "LICENSE"
   ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./utils/batch": {
+      "types": "./dist/utils/batch.d.ts",
+      "default": "./dist/utils/batch.js"
+    },
+    "./utils/streaming": {
+      "types": "./dist/utils/streaming.d.ts",
+      "default": "./dist/utils/streaming.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

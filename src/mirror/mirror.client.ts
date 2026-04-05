@@ -10,15 +10,18 @@ export interface MirrorPayload {
   thinkingBlock?: string;
   promptTokens?:  number;
   outputTokens?:  number;
+  metadata?:      Record<string, any>; // Runtime metadata
 }
 
 export class MirrorClient {
   private endpoint: string;
   private continumKey: string;
+  private organizationId?: string;
 
-  constructor(endpoint: string, continumKey: string) {
+  constructor(endpoint: string, continumKey: string, organizationId?: string) {
     this.endpoint   = endpoint.replace(/\/$/, '');
     this.continumKey = continumKey;
+    this.organizationId = organizationId;
   }
 
   /**
@@ -55,6 +58,7 @@ export class MirrorClient {
       thinkingBlock: result.thinkingBlock,
       promptTokens:  result.promptTokens,
       outputTokens:  result.outputTokens,
+      metadata:      params.metadata, // Include runtime metadata
     };
 
     // Debug logging
@@ -66,13 +70,20 @@ export class MirrorClient {
       console.log('[Continum Mirror] Payload:', JSON.stringify(payload, null, 2));
     }
 
+    // Build headers with optional organization context
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-continum-key': this.continumKey,
+    };
+    
+    if (this.organizationId) {
+      headers['x-organization-id'] = this.organizationId;
+    }
+
     // Intentionally not awaited — fire and forget
     fetch(`${this.endpoint}/audit/ingest`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-continum-key': this.continumKey,
-      },
+      headers,
       body: JSON.stringify(payload),
     })
     .then(async response => {
