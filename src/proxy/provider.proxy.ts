@@ -73,7 +73,6 @@ export class ProviderProxy {
     private readonly driver:   IProviderDriver,
     private readonly mirror:   MirrorClient,
     private readonly guardian: GuardianClient,
-    private readonly defaultSandbox: string,
     private readonly config: ContinumConfig,
     private readonly onCall: (provider: Provider, model: string, params: CallOptions, result: ChatResult) => void,
   ) {}
@@ -83,9 +82,9 @@ export class ProviderProxy {
    * and returns a chat() method bound to that resolved model.
    *
    * Usage:
-   *   continum.llm.openai.gpt_5.chat({ messages: [...] })
-   *   continum.llm.claude.opus_4_6.chat({ messages: [...] })
-   *   continum.llm.gemini.gemini_2_5_pro.chat({ messages: [...] })
+   *   continum.llm.openai.gpt_5.chat({ messages: [...], sandbox: 'my_sandbox' })
+   *   continum.llm.claude.opus_4_6.chat({ messages: [...], sandbox: 'my_sandbox' })
+   *   continum.llm.gemini.gemini_2_5_pro.chat({ messages: [...], sandbox: 'my_sandbox' })
    */
   build(): Record<string, ModelProxy> {
     return new Proxy({} as Record<string, ModelProxy>, {
@@ -94,21 +93,25 @@ export class ProviderProxy {
         const driver  = this.driver;
         const mirror  = this.mirror;
         const guardian = this.guardian;
-        const defaultSandbox = this.defaultSandbox;
         const provider = this.provider;
         const onCall = this.onCall;
         const config = this.config;
 
         return {
           chat: async (params: CallOptions): Promise<ChatResult> => {
-            const sandbox = params.sandbox ?? defaultSandbox;
+            const sandbox = params.sandbox;
+            
+            // Sandbox is required for Mirror auditing
+            if (!sandbox) {
+              console.warn('[Continum] No sandbox specified. Mirror auditing will be skipped. Specify sandbox in params.sandbox');
+            }
             
             // UNIFIED MODE: Guardian → LLM → Detonation (all automatic)
             
             // Phase 1: GUARDIAN (Pre-LLM Protection)
             const guardianEnabled = config.guardianConfig?.enabled !== false && !params.skipGuardian;
             
-            if (guardianEnabled) {
+            if (guardianEnabled && sandbox) {
               // Extract user input (handle both string and multimodal content)
               const userMessage = [...params.messages]
                 .reverse()
@@ -169,6 +172,8 @@ export class ProviderProxy {
                 if (config.strictMirror) throw error;
                 console.warn('[Continum Guardian] Scan failed, allowing call:', error);
               }
+            } else if (guardianEnabled && !sandbox) {
+              console.warn('[Continum Guardian] Guardian enabled but no sandbox specified. Skipping Guardian scan.');
             }
             
             // Phase 2: LLM CALL (Full feature support - vision, streaming, tools, etc.)
@@ -184,6 +189,8 @@ export class ProviderProxy {
                 // Never block user for audit failures
                 console.warn('[Continum Detonation] Shadow audit failed:', error);
               }
+            } else if (detonationEnabled && !sandbox) {
+              console.warn('[Continum Mirror] Mirror enabled but no sandbox specified. Skipping audit.');
             }
             
             // Phase 4: Notify SDK-level hook

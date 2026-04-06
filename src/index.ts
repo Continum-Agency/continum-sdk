@@ -90,8 +90,6 @@ export class Continum {
     this.mirror = new MirrorClient(endpoint, config.continumKey, config.organizationId);
     this.guardian = new GuardianClient(endpoint, config.continumKey);
     this.sandboxes = new SandboxConfigClient(endpoint, config.continumKey);
-
-    const defaultSandbox = config.defaultSandbox ?? '';
     
     // Resolve API keys from unified or legacy format
     const openaiKey = config.apiKeys?.openai ?? config.openaiKey ?? '';
@@ -102,16 +100,16 @@ export class Continum {
     const llm: any = {};
     
     if (openaiKey) {
-      llm.openai = this.buildProxy('openai', new OpenAIDriver(openaiKey), defaultSandbox);
+      llm.openai = this.buildProxy('openai', new OpenAIDriver(openaiKey));
     }
     
     if (anthropicKey) {
-      llm.claude = this.buildProxy('anthropic', new AnthropicDriver(anthropicKey), defaultSandbox);
+      llm.claude = this.buildProxy('anthropic', new AnthropicDriver(anthropicKey));
       llm.anthropic = llm.claude; // Alias
     }
     
     if (geminiKey) {
-      llm.gemini = this.buildProxy('gemini', new GeminiDriver(geminiKey), defaultSandbox);
+      llm.gemini = this.buildProxy('gemini', new GeminiDriver(geminiKey));
     }
     
     this.llm = llm;
@@ -119,15 +117,13 @@ export class Continum {
 
   private buildProxy(
     provider: Provider,
-    driver: any,
-    defaultSandbox: string
+    driver: any
   ) {
     return new ProviderProxy(
       provider,
       driver,
       this.mirror,
       this.guardian,
-      defaultSandbox,
       this.config,
       this.onCall.bind(this),
     ).build();
@@ -142,21 +138,28 @@ export class Continum {
   /**
    * Manually scan a prompt for PII before sending to LLM
    * Useful for custom validation flows
+   * 
+   * @param prompt - The prompt text to scan
+   * @param options - Scan options including required sandbox
    */
   async scanPrompt(
     prompt: string,
-    options?: {
-      sandbox?: string;
+    options: {
+      sandbox: string;      // Required: sandbox slug to use
       provider?: string;
       model?: string;
     }
   ) {
+    if (!options.sandbox) {
+      throw new Error('sandbox is required for scanPrompt');
+    }
+    
     return this.guardian.scanPrompt({
       userInput: prompt,
       systemPrompt: '',
-      provider: options?.provider ?? 'openai',
-      model: options?.model ?? 'gpt-4o',
-      sandbox: options?.sandbox ?? this.config.defaultSandbox ?? 'default'
+      provider: options.provider ?? 'openai',
+      model: options.model ?? 'gpt-4o',
+      sandbox: options.sandbox
     });
   }
 

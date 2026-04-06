@@ -39,13 +39,13 @@ const continum = new Continum({
     openai: process.env.OPENAI_API_KEY,
     anthropic: process.env.ANTHROPIC_API_KEY,
     gemini: process.env.GEMINI_API_KEY
-  },
-  defaultSandbox: 'pii_protection'
+  }
 });
 
 // OpenAI - use snake_case model names
 const response = await continum.llm.openai.gpt_4o.chat({
-  messages: [{ role: 'user', content: 'Hello world' }]
+  messages: [{ role: 'user', content: 'Hello world' }],
+  sandbox: 'my_sandbox'  // Required: specify sandbox
 });
 
 // Anthropic - use model family names (opus, sonnet, haiku)
@@ -612,19 +612,24 @@ const response = await continum.llm.openai.gpt_4o.chat({
 });
 ```
 
-### 2. Healthcare Application
+### Healthcare Application
 ```typescript
 // HIPAA-compliant AI interactions
 const continum = new Continum({
   continumKey: process.env.CONTINUM_KEY!,
   apiKeys: { openai: process.env.OPENAI_API_KEY },
-  defaultSandbox: 'hipaa_compliance',
   guardianConfig: {
     action: 'BLOCK_ON_DETECT',
     customPatterns: [
       { name: 'MRN', pattern: /MRN[:\s]*\d{6,}/gi, riskLevel: 'HIGH' }
     ]
   }
+});
+
+// Always specify sandbox
+const response = await continum.llm.openai.gpt_4o.chat({
+  messages: [{ role: 'user', content: userInput }],
+  sandbox: 'hipaa_compliance'  // Required
 });
 ```
 
@@ -685,9 +690,6 @@ interface ContinumConfig {
   // Organization context
   organizationId?: string;
   accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
-  
-  // Default sandbox
-  defaultSandbox?: string;
   
   // Guardian configuration
   guardianConfig?: {

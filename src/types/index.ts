@@ -150,9 +150,6 @@ export interface ContinumConfig {
   anthropicKey?: string;
   geminiKey?: string;
 
-  // Default sandbox slug — can be overridden per call
-  defaultSandbox?: string;
-
   // Organization context (for team features)
   organizationId?: string;
   accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
