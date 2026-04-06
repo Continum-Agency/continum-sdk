@@ -1,3 +1,5 @@
+import type { GuardianAction, DetectedEntity, GuardianActionConfig } from '../types';
+
 /**
  * Guardian Client - Pre-LLM Protection
  * 
@@ -12,29 +14,21 @@
  */
 
 export interface GuardianScanRequest {
-  userInput: string;
-  systemPrompt: string;
+  sandbox: string;
   provider: string;
   model: string;
-  sandbox: string;
+  systemPrompt: string;
+  userInput: string;
 }
 
 export interface GuardianResult {
-  action: 'ALLOW' | 'REDACT' | 'BLOCK';
+  action: GuardianAction;
   violations: string[];
   reasoning: string; // Redacted: "Email j****@example.com detected"
   cleanPrompt: string; // Redacted version
   confidence: number; // 0-1
   detectedEntities: DetectedEntity[];
-}
-
-export interface DetectedEntity {
-  type: 'EMAIL' | 'SSN' | 'PASSPORT' | 'CREDIT_CARD' | 'PHONE' | 'HEALTH_ID' | 'ADDRESS';
-  originalValue: string;
-  redactedValue: string; // "GB1****789"
-  start: number;
-  end: number;
-  confidence: number;
+  recommendations?: string[];
 }
 
 export class GuardianClient {
@@ -77,6 +71,9 @@ export class GuardianClient {
       
       // Basic health identifiers
       ['HEALTH_ID', /\b(?:MRN|MR|PATIENT)[#:\s]*[A-Z0-9]{6,12}\b/gi],
+      
+      // Address patterns
+      ['ADDRESS', /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd)\b/gi],
     ]);
   }
 
@@ -144,13 +141,44 @@ export class GuardianClient {
             redactedValue,
             start: match.index,
             end: match.index + originalValue.length,
-            confidence: 0.9 // High confidence for regex matches
+            confidence: this.calculateConfidence(type),
+            severity: this.getSeverity(type),
           });
         }
       }
     }
     
     return { detectedEntities };
+  }
+
+  private calculateConfidence(type: string): number {
+    const confidenceMap: Record<string, number> = {
+      EMAIL: 0.95,
+      CREDIT_CARD: 0.9,
+      SSN: 0.85,
+      PHONE: 0.8,
+      PASSPORT: 0.9,
+      HEALTH_ID: 0.75,
+      ADDRESS: 0.7,
+      IP_ADDRESS: 0.6,
+    };
+    
+    return confidenceMap[type] || 0.5;
+  }
+
+  private getSeverity(type: string): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+    const severityMap: Record<string, 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'> = {
+      EMAIL: 'HIGH',
+      CREDIT_CARD: 'CRITICAL',
+      SSN: 'CRITICAL',
+      PHONE: 'MEDIUM',
+      PASSPORT: 'HIGH',
+      HEALTH_ID: 'HIGH',
+      ADDRESS: 'MEDIUM',
+      IP_ADDRESS: 'LOW',
+    };
+    
+    return severityMap[type] || 'MEDIUM';
   }
 
   /**
@@ -190,7 +218,7 @@ export class GuardianClient {
   private buildGuardianResult(
     localResult: { detectedEntities: DetectedEntity[] },
     request: GuardianScanRequest,
-    guardianAction: 'BLOCK_ON_DETECT' | 'REDACT_AND_CONTINUE' | 'ALLOW_ALL' = 'REDACT_AND_CONTINUE'
+    guardianAction: GuardianActionConfig = 'REDACT_AND_CONTINUE'
   ): GuardianResult {
     let cleanPrompt = request.userInput;
     const violations: string[] = [];
@@ -208,7 +236,7 @@ export class GuardianClient {
     }
     
     // Determine action based on guardianAction configuration
-    let action: 'ALLOW' | 'REDACT' | 'BLOCK' = 'ALLOW';
+    let action: GuardianAction = 'ALLOW';
     
     if (guardianAction === 'ALLOW_ALL') {
       // Guardian disabled - allow everything
@@ -221,12 +249,17 @@ export class GuardianClient {
       action = 'REDACT';
     }
     
+    // Calculate average confidence
+    const avgConfidence = localResult.detectedEntities.length > 0
+      ? localResult.detectedEntities.reduce((sum, e) => sum + e.confidence, 0) / localResult.detectedEntities.length
+      : 1.0;
+    
     return {
       action,
       violations,
-      reasoning: reasoningParts.join(', '),
+      reasoning: reasoningParts.length > 0 ? reasoningParts.join(', ') : 'No sensitive information detected',
       cleanPrompt,
-      confidence: 0.9,
+      confidence: Math.round(avgConfidence * 100) / 100,
       detectedEntities: localResult.detectedEntities
     };
   }

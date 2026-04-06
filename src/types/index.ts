@@ -44,6 +44,94 @@ export interface ChatResult {
   raw:           any;       // Full provider response
 }
 
+// ─── API-aligned types ────────────────────────────────────────────────────────
+
+export type SandboxType = 
+  | 'PII_DETECTION'
+  | 'BIAS_DETECTION'
+  | 'SECURITY_AUDIT'
+  | 'PROMPT_INJECTION'
+  | 'DATA_EXFILTRATION'
+  | 'REGULATORY_COMPLIANCE'
+  | 'AGENT_SAFETY'
+  | 'HALLUCINATION_DETECTION'
+  | 'CONTENT_POLICY'
+  | 'FINANCIAL_COMPLIANCE'
+  | 'LEGAL_COMPLIANCE'
+  | 'MULTI_TURN_ATTACK'
+  | 'SUPPLY_CHAIN_INTEGRITY'
+  | 'FULL_SPECTRUM'
+  | 'CUSTOM';
+
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type GuardianAction = 'ALLOW' | 'REDACT' | 'BLOCK';
+
+export type GuardianActionConfig = 'BLOCK_ON_DETECT' | 'REDACT_AND_CONTINUE' | 'ALLOW_ALL';
+
+export type Region = 'EU' | 'US' | 'RW' | 'UG' | 'GLOBAL';
+
+export type ComplianceFramework = 'GDPR' | 'SOC2' | 'ISO27001' | 'HIPAA';
+
+export type EntityType = 
+  | 'EMAIL' 
+  | 'SSN' 
+  | 'PASSPORT' 
+  | 'CREDIT_CARD' 
+  | 'PHONE' 
+  | 'HEALTH_ID' 
+  | 'ADDRESS'
+  | 'SENSITIVE_TOPIC';
+
+export interface DetectedEntity {
+  type: EntityType;
+  originalValue: string;
+  redactedValue: string;
+  start: number;
+  end: number;
+  confidence: number;
+  severity: RiskLevel;
+}
+
+export interface SandboxConfig {
+  id: string;
+  customerId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  sandboxType: SandboxType;
+  customRules: string[];
+  alertThreshold: RiskLevel;
+  guardianAction: GuardianActionConfig;
+  region: Region;
+  regulations: string[];
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateSandboxDto {
+  slug: string;
+  name: string;
+  description?: string;
+  sandboxType: SandboxType;
+  customRules?: string[];
+  alertThreshold?: RiskLevel;
+  guardianAction?: GuardianActionConfig;
+  region?: Region;
+  regulations?: string[];
+}
+
+export interface UpdateSandboxDto {
+  name?: string;
+  description?: string;
+  customRules?: string[];
+  alertThreshold?: RiskLevel;
+  guardianAction?: GuardianActionConfig;
+  region?: Region;
+  regulations?: string[];
+}
+
 // ─── SDK config ───────────────────────────────────────────────────────────────
 
 export interface ContinumConfig {
@@ -72,14 +160,14 @@ export interface ContinumConfig {
   // Guardian configuration for PII protection
   guardianConfig?: {
     enabled?: boolean;          // Enable pre-LLM protection (default: true)
-    action?: 'BLOCK_ON_DETECT' | 'REDACT_AND_CONTINUE' | 'ALLOW_ALL'; // Guardian action mode
+    action?: GuardianActionConfig; // Guardian action mode
     blockHighRisk?: boolean;    // Block SSN, credit cards, etc. (default: true) - DEPRECATED: use action instead
     redactMediumRisk?: boolean; // Redact emails, phones, etc. (default: true) - DEPRECATED: use action instead
     localOnly?: boolean;        // Use only local patterns (fastest)
     customPatterns?: Array<{    // Custom PII patterns
       name: string;
       pattern: RegExp;
-      riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+      riskLevel: RiskLevel;
     }>;
   };
 

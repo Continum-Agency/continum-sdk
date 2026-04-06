@@ -65,6 +65,40 @@ const response3 = await continum.llm.gemini.gemini_2_5_pro.chat({
 // ✅ Shadow Audit runs in background (post-execution)
 ```
 
+### Sandbox Management (NEW in v0.1.0)
+
+Create and manage sandboxes programmatically:
+
+```typescript
+// Create a sandbox
+const sandbox = await continum.sandboxes.create({
+  slug: 'pii_strict',
+  name: 'Strict PII Detection',
+  sandboxType: 'PII_DETECTION',
+  guardianAction: 'BLOCK_ON_DETECT',
+  alertThreshold: 'HIGH',
+  region: 'EU',
+  regulations: ['GDPR', 'EU_AI_ACT']
+});
+
+// List all sandboxes
+const sandboxes = await continum.sandboxes.list();
+
+// Get sandbox details
+const config = await continum.sandboxes.get('pii_strict');
+
+// Update sandbox
+await continum.sandboxes.update('pii_strict', {
+  alertThreshold: 'CRITICAL'
+});
+
+// Pause/resume sandbox
+await continum.sandboxes.toggle('pii_strict');
+
+// Delete sandbox
+await continum.sandboxes.delete('old_sandbox');
+```
+
 ### Runtime Metadata Enrichment (NEW in v0.1.0)
 
 Capture runtime context for compliance tracking:
@@ -525,6 +559,7 @@ console.log(`Failed: ${results.filter(r => !r.success).length}`);
 - **Dual Protection**: Guardian blocks threats, Shadow Audit monitors
 - **Comprehensive Detection**: PII, bias, security, prompt injection
 - **Real-time Dashboard**: Monitor violations and compliance
+- **Sandbox Management**: Create and configure sandboxes programmatically
 
 ### SDK-Exclusive Features (v0.1.0)
 - **Runtime Metadata Enrichment**: Capture application context at call-time
@@ -537,6 +572,7 @@ console.log(`Failed: ${results.filter(r => !r.success).length}`);
 - **Error Handling**: Programmatic control flow and recovery
 - **Organization Context**: Team-wide pattern sharing and tracking
 - **Offline Mode**: Local pattern matching without API calls
+- **Programmatic Sandbox Management**: CRUD operations for sandboxes
 
 ### What Dashboard Does Better
 - Visual data exploration and filtering
@@ -545,6 +581,9 @@ console.log(`Failed: ${results.filter(r => !r.success).length}`);
 - Configuration management UI
 - Reporting and analytics dashboards
 - Evidence package generation (manual)
+- Violation viewing and management
+- Pattern approval workflows
+- API key management (security)
 
 ### What SDK Does Better
 - Runtime interception and protection
@@ -555,6 +594,7 @@ console.log(`Failed: ${results.filter(r => !r.success).length}`);
 - Real-time metadata enrichment
 - Error handling and retry logic
 - Provider fallback and routing
+- Sandbox creation during development
 
 ## Use Cases
 

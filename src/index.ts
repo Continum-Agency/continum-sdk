@@ -4,6 +4,7 @@ import { AnthropicDriver } from './drivers/anthropic.driver';
 import { GeminiDriver }    from './drivers/gemini.driver';
 import { MirrorClient }    from './mirror/mirror.client';
 import { GuardianClient }  from './guardian/guardian.client';
+import { SandboxConfigClient } from './sandbox/sandbox.client';
 import { ProviderProxy }   from './proxy/provider.proxy';
 
 const DEFAULT_ENDPOINT = 'https://api.continum.co';
@@ -74,6 +75,8 @@ export class Continum {
     anthropic: Record<string, { chat(params: CallOptions): Promise<ChatResult> }>;
   };
 
+  public readonly sandboxes: SandboxConfigClient;
+
   private readonly mirror: MirrorClient;
   private readonly guardian: GuardianClient;
   private readonly config: ContinumConfig;
@@ -86,6 +89,7 @@ export class Continum {
     
     this.mirror = new MirrorClient(endpoint, config.continumKey, config.organizationId);
     this.guardian = new GuardianClient(endpoint, config.continumKey);
+    this.sandboxes = new SandboxConfigClient(endpoint, config.continumKey);
 
     const defaultSandbox = config.defaultSandbox ?? '';
     
