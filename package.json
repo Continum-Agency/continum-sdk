@@ -1,7 +1,7 @@
 {
   "name": "@continum/sdk",
-  "version": "0.5.1",
-  "description": "Zero-latency compliance auditing for every LLM call in your application",
+  "version": "2.0.0",
+  "description": "Zero-latency compliance auditing with protect() - one line to secure every LLM call",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -13,14 +13,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./utils/batch": {
-      "types": "./dist/utils/batch.d.ts",
-      "default": "./dist/utils/batch.js"
-    },
-    "./utils/streaming": {
-      "types": "./dist/utils/streaming.d.ts",
-      "default": "./dist/utils/streaming.js"
     }
   },
   "scripts": {
@@ -42,8 +34,7 @@
     "gemini",
     "security",
     "privacy",
-    "bias-detection",
-    "prompt-injection",
+    "protect",
     "zero-latency"
   ],
   "author": "Continum Team",
@@ -66,7 +57,6 @@
     "dotenv": "^16.0.0"
   },
   "peerDependencies": {
-    "typescript": ">=5.0.0",
     "openai": "^4.0.0",
     "@anthropic-ai/sdk": "^0.24.0",
     "@google/generative-ai": "^0.15.0"
