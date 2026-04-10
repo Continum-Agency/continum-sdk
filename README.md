@@ -1,4 +1,4 @@
-# @continum/sdk v2.0
+# @continum/sdk v0.6.0
 
 **Protection-first AI compliance in one line**
 

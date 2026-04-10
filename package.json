@@ -1,6 +1,6 @@
 {
   "name": "@continum/sdk",
-  "version": "2.0.0",
+  "version": "0.6.0",
   "description": "Zero-latency compliance auditing with protect() - one line to secure every LLM call",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

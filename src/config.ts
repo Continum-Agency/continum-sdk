@@ -112,13 +112,13 @@ export function resolveFrameworks(comply?: ComplianceFramework[]): ComplianceFra
 }
 
 function extractWorkspaceId(apiKey: string): string {
-  // API keys are in format: ck_live_workspaceId_randomString
-  // or ck_test_workspaceId_randomString
+  // API keys are in format: ctn_live_workspaceId_randomString
+  // or ctn_test_workspaceId_randomString
   const parts = apiKey.split('_');
-  if (parts.length >= 3) {
+  if (parts.length >= 3 && (parts[0] === 'ctn') && (parts[1] === 'live' || parts[1] === 'test')) {
     return parts[2];
   }
-  throw new Error('Invalid API key format');
+  throw new Error('Invalid API key format. Expected format: ctn_live_<workspace_id>_<key> or ctn_test_<workspace_id>_<key>');
 }
 
 export function isLocalMode(config: ResolvedConfig): boolean {
