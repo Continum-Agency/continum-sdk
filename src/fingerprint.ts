@@ -12,7 +12,6 @@ export function computeFingerprint(config: ResolvedConfig): string {
     comply: config.comply?.slice().sort(),
     sandboxTypes: config.sandboxTypes?.slice().sort(),
     customRules: config.customRules?.slice().sort(),
-    environment: config.environment,
   });
 
   return createHash('sha256').update(stable).digest('hex');

@@ -14,7 +14,7 @@ export async function fireAuditAsync(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': config.apiKey,
+        'x-continum-key': config.apiKey,
       },
       body: JSON.stringify({
         sandboxSlug: payload.sandboxSlug, // ✅ FIXED: Use slug instead of ID
@@ -31,7 +31,6 @@ export async function fireAuditAsync(
           sandboxId: payload.sandboxId,
           sessionId: payload.sessionId,
           userId: payload.userId,
-          environment: payload.environment,
           isStreaming: payload.isStreaming,
           sdkVersion: payload.sdkVersion,
         },
@@ -58,7 +57,7 @@ export async function fireAuditSync(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
+      'x-continum-key': config.apiKey,
     },
     body: JSON.stringify({
       sandboxSlug: payload.sandboxSlug, // ✅ FIXED: Use slug instead of ID
@@ -75,7 +74,6 @@ export async function fireAuditSync(
         sandboxId: payload.sandboxId,
         sessionId: payload.sessionId,
         userId: payload.userId,
-        environment: payload.environment,
         isStreaming: payload.isStreaming,
         sdkVersion: payload.sdkVersion,
       },

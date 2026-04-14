@@ -41,7 +41,7 @@ async function resolveSandboxFromAPI(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
+      'x-continum-key': config.apiKey,
     },
     body: JSON.stringify({
       fingerprint,
@@ -49,7 +49,6 @@ async function resolveSandboxFromAPI(
       comply: config.comply,
       sandboxTypes,
       customRules: config.customRules,
-      environment: config.environment,
       providers: config.detectedProviders,
       sdkVersion: SDK_VERSION,
       detectionSignals: signals,

@@ -57,7 +57,6 @@ export function resolveConfig(
     comply: merged.comply.length > 0 ? merged.comply : undefined,
     sandboxTypes: merged.sandbox?.types,
     customRules: merged.customRules ?? merged.sandbox?.customRules ?? [],
-    environment: merged.environment ?? 'production',
     region: merged.region ?? merged.sandbox?.region ?? 'us-east-1',
     local: merged.local ?? false,
     blockOn: merged.blockOn ?? merged.sandbox?.blockOn,

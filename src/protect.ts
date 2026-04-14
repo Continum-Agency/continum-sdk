@@ -50,7 +50,6 @@ export async function protect<T>(
     userId: options?.userId,
     metadata: options?.metadata,
     sdkVersion: SDK_VERSION,
-    environment: resolvedConfig.environment,
     isStreaming: false, // TODO: detect streaming
   };
 

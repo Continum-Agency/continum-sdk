@@ -73,7 +73,6 @@ export interface ContinumConfig {
   comply?: ComplianceFramework[];
   sandbox?: DirectSandboxConfig;
   customRules?: string[];
-  environment?: 'production' | 'staging' | 'development';
   region?: string;
   local?: boolean;
   blockOn?: RiskLevel;
@@ -141,7 +140,6 @@ export interface ResolvedConfig {
   comply?: ComplianceFramework[];
   sandboxTypes?: SandboxType[];
   customRules?: string[];
-  environment: 'production' | 'staging' | 'development';
   region: string;
   local: boolean;
   blockOn?: RiskLevel;
@@ -157,7 +155,6 @@ export interface SandboxResolution {
   sandboxSlug: string; // ✅ ADDED: Slug for audit ingestion
   sandboxTypes: SandboxType[];
   name: string;
-  environment: string;
   frameworks: ComplianceFramework[];
   customRules: string[];
   blockOn: RiskLevel | null;
@@ -190,7 +187,6 @@ export interface AuditPayload {
   userId?: string;
   metadata?: Record<string, string>;
   sdkVersion: string;
-  environment: string;
   isStreaming: boolean;
 }
 
