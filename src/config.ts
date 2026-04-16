@@ -1,6 +1,7 @@
 import type { ContinumConfig, ProtectOptions, ResolvedConfig, Preset, SandboxType, ComplianceFramework } from './types';
+import packageJson from '../package.json';
 
-const SDK_VERSION = '2.0.0';
+const SDK_VERSION = packageJson.version;
 const DEFAULT_BASE_URL = 'https://api.continum.co';
 
 // ─── Preset to Sandbox Types Mapping ──────────────────────────────────────────
@@ -58,9 +59,8 @@ export function resolveConfig(
     sandboxTypes: merged.sandbox?.types,
     customRules: merged.customRules ?? merged.sandbox?.customRules ?? [],
     region: merged.region ?? merged.sandbox?.region ?? 'us-east-1',
-    local: merged.local ?? false,
     blockOn: merged.blockOn ?? merged.sandbox?.blockOn,
-    baseUrl: merged.baseUrl ?? DEFAULT_BASE_URL,
+    baseUrl: DEFAULT_BASE_URL,
     detectedProviders: [],
     onViolation: merged.onViolation,
     onRiskLevel: merged.onRiskLevel,
@@ -118,15 +118,6 @@ function extractWorkspaceId(apiKey: string): string {
     return parts[2];
   }
   throw new Error('Invalid API key format. Expected format: ctn_live_<workspace_id>_<key> or ctn_test_<workspace_id>_<key>');
-}
-
-export function isLocalMode(config: ResolvedConfig): boolean {
-  return (
-    config.local === true ||
-    process.env.CONTINUM_LOCAL === 'true' ||
-    process.env.NODE_ENV === 'development' ||
-    process.env.NODE_ENV === 'test'
-  );
 }
 
 export { SDK_VERSION };

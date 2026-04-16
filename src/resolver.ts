@@ -37,7 +37,18 @@ async function resolveSandboxFromAPI(
     sandboxTypes: config.sandboxTypes,
   });
 
-  const response = await fetch(`${config.baseUrl}/internal/workspace/resolve-sandbox`, {
+  const url = `${config.baseUrl}/internal/workspace/resolve-sandbox`;
+
+  if (process.env.CONTINUM_DEBUG === 'true') {
+    console.log('\n[SDK DEBUG] Resolving sandbox:');
+    console.log(`  URL: ${url}`);
+    console.log(`  Preset: ${config.preset}`);
+    console.log(`  Comply: ${config.comply?.join(', ')}`);
+    console.log(`  Sandbox Types: ${sandboxTypes.join(', ')}`);
+    console.log(`  API Key: ${config.apiKey.substring(0, 30)}...`);
+  }
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -57,10 +68,24 @@ async function resolveSandboxFromAPI(
 
   if (!response.ok) {
     const text = await response.text();
+    if (process.env.CONTINUM_DEBUG === 'true') {
+      console.error(`[SDK DEBUG] Sandbox resolution failed: ${response.status}`);
+      console.error(`[SDK DEBUG] Error: ${text}`);
+    }
     throw new Error(`Sandbox resolution failed: HTTP ${response.status} — ${text}`);
   }
 
-  return response.json() as Promise<SandboxResolution>;
+  const result = await response.json() as SandboxResolution;
+
+  if (process.env.CONTINUM_DEBUG === 'true') {
+    console.log(`[SDK DEBUG] Sandbox resolved:`);
+    console.log(`  ID: ${result.sandboxId}`);
+    console.log(`  Slug: ${result.sandboxSlug}`);
+    console.log(`  Name: ${result.name}`);
+    console.log(`  Is New: ${result.isNew}`);
+  }
+
+  return result;
 }
 
 /**

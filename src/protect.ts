@@ -1,8 +1,7 @@
 import { interceptLLMCall } from './interceptor';
 import { fireAuditAsync, fireAuditSync, generateAuditId } from './transport';
 import { getSandboxId } from './resolver';
-import { resolveConfig, isLocalMode, SDK_VERSION } from './config';
-import { localAudit } from './local';
+import { resolveConfig, SDK_VERSION } from './config';
 import { runViolationHandlers } from './handlers';
 import type { ContinumConfig, ProtectOptions, AuditSignal, RiskLevel } from './types';
 
@@ -30,7 +29,6 @@ export async function protect<T>(
   options?: ProtectOptions
 ): Promise<T> {
   const resolvedConfig = resolveConfig(config, options);
-  const local = isLocalMode(resolvedConfig);
 
   // Intercept the LLM call — patches fetch, runs fn(), restores fetch
   const { result, payload } = await interceptLLMCall(fn);
@@ -52,12 +50,6 @@ export async function protect<T>(
     sdkVersion: SDK_VERSION,
     isStreaming: false, // TODO: detect streaming
   };
-
-  if (local) {
-    // Local mode — audit inline, print to terminal, no cloud, no quota used
-    await localAudit(enrichedPayload, resolvedConfig);
-    return result;
-  }
 
   const blockOn = options?.blockOn ?? resolvedConfig.blockOn;
 

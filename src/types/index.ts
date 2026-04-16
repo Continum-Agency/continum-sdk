@@ -74,7 +74,6 @@ export interface ContinumConfig {
   sandbox?: DirectSandboxConfig;
   customRules?: string[];
   region?: string;
-  local?: boolean;
   blockOn?: RiskLevel;
   alerts?: {
     slack?: string;
@@ -84,7 +83,6 @@ export interface ContinumConfig {
   onViolation?: Partial<Record<ViolationCode, ViolationHandler>>;
   onRiskLevel?: Partial<Record<RiskLevel, ViolationHandler>>;
   onError?: (error: Error) => void;
-  baseUrl?: string;
 }
 
 export interface DirectSandboxConfig {
@@ -141,7 +139,6 @@ export interface ResolvedConfig {
   sandboxTypes?: SandboxType[];
   customRules?: string[];
   region: string;
-  local: boolean;
   blockOn?: RiskLevel;
   baseUrl: string;
   detectedProviders: string[];

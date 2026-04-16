@@ -1,4 +1,4 @@
-# @continum/sdk v0.6.0
+# @continum/sdk v0.6.4
 
 **Protection-first AI compliance in one line**
 
@@ -9,6 +9,19 @@ Zero-latency compliance auditing for every LLM call in your application. Wrap an
 ```bash
 npm install @continum/sdk
 ```
+
+## Get Your API Key
+
+1. Sign up at [app.continum.co](https://app.continum.co)
+2. Navigate to Settings → API Keys
+3. Create a new API key:
+   - **Test key** (`ctn_test_*`) for development
+   - **Live key** (`ctn_live_*`) for production
+4. Add to your `.env` file:
+   ```bash
+   CONTINUM_API_KEY=ctn_live_your_workspace_id_your_key
+   CONTINUM_TEST_KEY=ctn_test_your_workspace_id_your_key
+   ```
 
 ## Quick Start
 
@@ -25,7 +38,9 @@ const response = await protect(
     messages: [{ role: 'user', content: 'Hello!' }]
   }),
   {
-    apiKey: process.env.CONTINUM_API_KEY!,
+    apiKey: process.env.CONTINUM_API_KEY!
+  },
+  {
     preset: 'customer-support'
   }
 );
@@ -41,7 +56,6 @@ That's it. Every LLM call is now audited for compliance violations with zero lat
 - **Zero Latency**: Fire-and-forget auditing doesn't slow down your application
 - **Auto-Configuration**: Presets automatically configure the right detection types
 - **Framework Compliance**: Specify `comply: ['GDPR', 'SOC2']` and get the right checks
-- **Local Dev Mode**: Automatic local auditing in development without API calls
 - **Blocking Mode**: Optional synchronous auditing when safety > speed
 - **Violation Handlers**: React to specific violations in real-time
 
@@ -55,8 +69,7 @@ import { continum } from '@continum/sdk';
 continum.configure({
   apiKey: process.env.CONTINUM_API_KEY!,
   preset: 'customer-support',
-  comply: ['GDPR', 'SOC2'],
-  environment: 'production'
+  comply: ['GDPR', 'SOC2']
 });
 
 // Now use protect() without passing config every time
@@ -71,7 +84,9 @@ const response = await continum.protect(
 const response = await protect(
   () => openai.chat.completions.create({...}),
   {
-    apiKey: process.env.CONTINUM_API_KEY!,
+    apiKey: process.env.CONTINUM_API_KEY!
+  },
+  {
     preset: 'fintech-ai',
     comply: ['FINRA', 'SOC2'],
     userId: 'user_123',
@@ -80,6 +95,34 @@ const response = await protect(
   }
 );
 ```
+
+## API Keys and Environments
+
+Continum uses environment-specific API keys to automatically route audits:
+
+- **Test Keys** (`ctn_test_*`): For development and testing
+  - Audits appear in "Test" environment in dashboard
+  - Can be retrieved anytime from settings
+  
+- **Live Keys** (`ctn_live_*`): For production use
+  - Audits appear in "Live" environment in dashboard
+  - Shown only once during creation (store securely)
+
+```typescript
+// Development/Testing
+continum.configure({
+  apiKey: process.env.CONTINUM_TEST_KEY!, // ctn_test_*
+  preset: 'customer-support'
+});
+
+// Production
+continum.configure({
+  apiKey: process.env.CONTINUM_API_KEY!, // ctn_live_*
+  preset: 'customer-support'
+});
+```
+
+The environment is automatically determined by your API key prefix - no additional configuration needed.
 
 ## Presets
 
@@ -120,7 +163,9 @@ By default, `protect()` uses fire-and-forget auditing (zero latency). For high-r
 const response = await protect(
   () => openai.chat.completions.create({...}),
   {
-    apiKey: process.env.CONTINUM_API_KEY!,
+    apiKey: process.env.CONTINUM_API_KEY!
+  },
+  {
     blockOn: 'HIGH' // Block if risk level is HIGH or CRITICAL
   }
 );
@@ -134,7 +179,8 @@ import { protect, ContinumBlockedError } from '@continum/sdk';
 try {
   const response = await protect(
     () => openai.chat.completions.create({...}),
-    { apiKey: '...', blockOn: 'HIGH' }
+    { apiKey: process.env.CONTINUM_API_KEY! },
+    { blockOn: 'HIGH' }
   );
 } catch (error) {
   if (error instanceof ContinumBlockedError) {
@@ -168,30 +214,6 @@ continum.configure({
 });
 ```
 
-## Local Development Mode
-
-In development, Continum automatically runs local audits without calling the API:
-
-```typescript
-// Automatically enabled when NODE_ENV=development
-const response = await protect(
-  () => openai.chat.completions.create({...}),
-  { apiKey: '...', preset: 'customer-support' }
-);
-
-// Output:
-// [CONTINUM] ✓ audit:clean — LOW — gpt-4 — 45ms
-```
-
-Force local mode:
-
-```typescript
-continum.configure({
-  apiKey: process.env.CONTINUM_API_KEY!,
-  local: true
-});
-```
-
 ## Multi-Turn Conversations
 
 Track conversations across multiple turns:
@@ -206,7 +228,9 @@ for (const userMessage of conversation) {
       messages: [...history, { role: 'user', content: userMessage }]
     }),
     {
-      apiKey: process.env.CONTINUM_API_KEY!,
+      apiKey: process.env.CONTINUM_API_KEY!
+    },
+    {
       sessionId,
       userId: 'user_123'
     }
@@ -259,7 +283,7 @@ continum.configure({
 
 ### Alerts
 
-Receive compliance violation alerts directly in Slack, PagerDuty, Discord, or custom webhooks without visiting the dashboard:
+Receive compliance violation alerts directly in Slack, PagerDuty, or email without visiting the dashboard:
 
 ```typescript
 continum.configure({
@@ -267,19 +291,12 @@ continum.configure({
   alerts: {
     slack: process.env.SLACK_WEBHOOK_URL,
     pagerduty: process.env.PAGERDUTY_KEY,
-    discord: process.env.DISCORD_WEBHOOK_URL,
-    webhook: process.env.CUSTOM_WEBHOOK_URL
+    email: process.env.ALERT_EMAIL
   }
 });
 ```
 
-Alerts are automatically routed by risk level:
-- **CRITICAL** violations → PagerDuty (if configured)
-- **HIGH/CRITICAL** violations → Slack (if configured)
-- **MEDIUM/LOW** violations → Discord (if configured)
-- **All violations** → Custom webhook (if configured)
-
-For detailed alert configuration, see the [Alert Setup Guide](../../docs/alert-setup-guide.md).
+Note: Alert configuration in the SDK is currently for reference. Alerts are configured in the Continum dashboard under Settings → Alerts. For detailed alert setup, see the [Alert Setup Guide](../../docs/alert-setup-guide.md).
 
 ## Migration from v1
 
@@ -310,7 +327,9 @@ const response = await protect(
     messages: [...]
   }),
   {
-    apiKey: process.env.CONTINUM_API_KEY!,
+    apiKey: process.env.CONTINUM_API_KEY!
+  },
+  {
     preset: 'customer-support'
   }
 );
@@ -321,7 +340,18 @@ Benefits of v2:
 - Zero-latency by default
 - Automatic sandbox resolution
 - Preset-based configuration
-- Local dev mode
+- Environment-aware API keys (test vs live)
+- Correct function signature: `protect(fn, config, options)`
+
+## How It Works
+
+1. **Intercept**: SDK intercepts your LLM API call
+2. **Execute**: Your LLM call runs normally (zero latency)
+3. **Audit**: Audit is sent asynchronously to Continum API
+4. **Analyze**: Bedrock analyzes for violations in the background
+5. **Alert**: Violations trigger alerts and appear in dashboard
+
+The SDK never blocks your application - audits happen in the background.
 
 ## TypeScript Support
 
