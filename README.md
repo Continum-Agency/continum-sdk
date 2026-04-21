@@ -1,27 +1,12 @@
-# @continum/sdk v0.6.4
+# @continum/sdk
 
-**Protection-first AI compliance in one line**
-
-Zero-latency compliance auditing for every LLM call in your application. Wrap any LLM call with `protect()` and get automatic PII detection, bias monitoring, security auditing, and compliance reporting.
+Zero-latency compliance auditing for LLM applications. Wrap any LLM call with `protect()` and every interaction is automatically audited for PII, security, bias, and regulatory compliance.
 
 ## Installation
 
 ```bash
 npm install @continum/sdk
 ```
-
-## Get Your API Key
-
-1. Sign up at [app.continum.co](https://app.continum.co)
-2. Navigate to Settings → API Keys
-3. Create a new API key:
-   - **Test key** (`ctn_test_*`) for development
-   - **Live key** (`ctn_live_*`) for production
-4. Add to your `.env` file:
-   ```bash
-   CONTINUM_API_KEY=ctn_live_your_workspace_id_your_key
-   CONTINUM_TEST_KEY=ctn_test_your_workspace_id_your_key
-   ```
 
 ## Quick Start
 
@@ -31,37 +16,21 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
-// Wrap your LLM call with protect()
 const response = await protect(
   () => openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [{ role: 'user', content: 'Hello!' }]
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: userMessage }],
   }),
   {
-    apiKey: process.env.CONTINUM_API_KEY!
-  },
-  {
-    preset: 'customer-support'
+    apiKey: process.env.CONTINUM_API_KEY!,
+    preset: 'customer-support',
   }
 );
-
-// Use the response normally
-console.log(response.choices[0].message.content);
 ```
 
-That's it. Every LLM call is now audited for compliance violations with zero latency impact.
+That's it. Every LLM call is now audited. Sandboxes are created automatically based on your preset.
 
-## Features
-
-- **Zero Latency**: Fire-and-forget auditing doesn't slow down your application
-- **Auto-Configuration**: Presets automatically configure the right detection types
-- **Framework Compliance**: Specify `comply: ['GDPR', 'SOC2']` and get the right checks
-- **Blocking Mode**: Optional synchronous auditing when safety > speed
-- **Violation Handlers**: React to specific violations in real-time
-
-## Configuration
-
-### Global Configuration
+## Global Configuration
 
 ```typescript
 import { continum } from '@continum/sdk';
@@ -69,310 +38,88 @@ import { continum } from '@continum/sdk';
 continum.configure({
   apiKey: process.env.CONTINUM_API_KEY!,
   preset: 'customer-support',
-  comply: ['GDPR', 'SOC2']
+  comply: ['GDPR', 'SOC2'],
 });
 
-// Now use protect() without passing config every time
+// Then use anywhere
 const response = await continum.protect(
   () => openai.chat.completions.create({...})
 );
 ```
 
-### Per-Call Configuration
-
-```typescript
-const response = await protect(
-  () => openai.chat.completions.create({...}),
-  {
-    apiKey: process.env.CONTINUM_API_KEY!
-  },
-  {
-    preset: 'fintech-ai',
-    comply: ['FINRA', 'SOC2'],
-    userId: 'user_123',
-    sessionId: 'session_456',
-    metadata: { feature: 'chat' }
-  }
-);
-```
-
-## API Keys and Environments
-
-Continum uses environment-specific API keys to automatically route audits:
-
-- **Test Keys** (`ctn_test_*`): For development and testing
-  - Audits appear in "Test" environment in dashboard
-  - Can be retrieved anytime from settings
-  
-- **Live Keys** (`ctn_live_*`): For production use
-  - Audits appear in "Live" environment in dashboard
-  - Shown only once during creation (store securely)
-
-```typescript
-// Development/Testing
-continum.configure({
-  apiKey: process.env.CONTINUM_TEST_KEY!, // ctn_test_*
-  preset: 'customer-support'
-});
-
-// Production
-continum.configure({
-  apiKey: process.env.CONTINUM_API_KEY!, // ctn_live_*
-  preset: 'customer-support'
-});
-```
-
-The environment is automatically determined by your API key prefix - no additional configuration needed.
-
 ## Presets
 
-Presets automatically configure the right detection types for your use case:
-
-- `customer-support` — PII detection, content policy, bias detection
-- `legal-ai` — PII, legal compliance, hallucination detection, bias
-- `fintech-ai` — PII, financial compliance, security audit, bias
-- `healthcare-ai` — PII, content policy, bias, hallucination detection
-- `coding-assistant` — Security audit, supply chain integrity, prompt injection
-- `agent` — Agent safety, prompt injection, data exfiltration, security
-- `content-generation` — Content policy, bias, hallucination detection
-- `internal-tool` — PII detection, security audit
-- `data-pipeline` — PII, data exfiltration, security audit
-- `education-ai` — Content policy, bias, hallucination detection
+| Preset | Detection Types |
+|--------|----------------|
+| `customer-support` | PII, content policy, bias |
+| `legal-ai` | PII, legal compliance, hallucination, bias |
+| `fintech-ai` | PII, financial compliance, security, bias |
+| `healthcare-ai` | PII, content policy, bias, hallucination |
+| `coding-assistant` | Security, supply chain, prompt injection |
+| `agent` | Agent safety, prompt injection, data exfiltration |
+| `content-generation` | Content policy, bias, hallucination |
+| `data-pipeline` | PII, data exfiltration, security |
 
 ## Compliance Frameworks
 
-Specify compliance frameworks and get automatic detection configuration:
-
 ```typescript
-continum.configure({
+const response = await protect(fn, {
   apiKey: process.env.CONTINUM_API_KEY!,
-  comply: ['GDPR', 'HIPAA', 'SOC2']
+  comply: ['GDPR', 'HIPAA', 'SOC2'],
 });
 ```
 
-Supported frameworks:
-- `GDPR`, `CCPA`, `HIPAA`, `SOC2`, `ISO_27001`
-- `EU_AI_ACT`, `FINRA`, `FCA`, `PCI_DSS`
-- `PDPA`, `PIPEDA`, `UK_DPA_2018`, `NIST_AI_RMF`
+Supported: `GDPR`, `CCPA`, `HIPAA`, `SOC2`, `ISO_27001`, `EU_AI_ACT`, `FINRA`, `FCA`, `PCI_DSS`, `PDPA`, `PIPEDA`, `UK_DPA_2018`, `NIST_AI_RMF`
 
 ## Blocking Mode
 
-By default, `protect()` uses fire-and-forget auditing (zero latency). For high-risk scenarios, use blocking mode:
+Block LLM responses that exceed a risk threshold:
 
 ```typescript
-const response = await protect(
-  () => openai.chat.completions.create({...}),
-  {
-    apiKey: process.env.CONTINUM_API_KEY!
-  },
-  {
-    blockOn: 'HIGH' // Block if risk level is HIGH or CRITICAL
-  }
-);
-```
-
-This will throw `ContinumBlockedError` if a violation is detected:
-
-```typescript
-import { protect, ContinumBlockedError } from '@continum/sdk';
-
-try {
-  const response = await protect(
-    () => openai.chat.completions.create({...}),
-    { apiKey: process.env.CONTINUM_API_KEY! },
-    { blockOn: 'HIGH' }
-  );
-} catch (error) {
-  if (error instanceof ContinumBlockedError) {
-    console.log('Blocked:', error.signal.violations);
-    console.log('Risk level:', error.signal.riskLevel);
-    console.log('Reasoning:', error.signal.reasoning);
-  }
-}
+const response = await protect(fn, {
+  apiKey: process.env.CONTINUM_API_KEY!,
+  preset: 'customer-support',
+  blockOn: 'HIGH', // Throws ContinumBlockedError if risk >= HIGH
+});
 ```
 
 ## Violation Handlers
 
-React to specific violations in real-time:
-
 ```typescript
-continum.configure({
+const response = await protect(fn, {
   apiKey: process.env.CONTINUM_API_KEY!,
+  preset: 'customer-support',
   onViolation: {
-    PII_LEAK: async (signal) => {
-      await sendAlert('PII detected', signal);
+    PII_LEAK: (signal) => {
+      console.warn('PII detected:', signal.reasoning);
     },
-    PROMPT_INJECTION: async (signal) => {
-      await logSecurityIncident(signal);
-    }
   },
   onRiskLevel: {
-    CRITICAL: async (signal) => {
-      await notifySecurityTeam(signal);
-    }
-  }
-});
-```
-
-## Multi-Turn Conversations
-
-Track conversations across multiple turns:
-
-```typescript
-const sessionId = 'session_' + Date.now();
-
-for (const userMessage of conversation) {
-  const response = await protect(
-    () => openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [...history, { role: 'user', content: userMessage }]
-    }),
-    {
-      apiKey: process.env.CONTINUM_API_KEY!
+    CRITICAL: (signal) => {
+      alertSecurityTeam(signal);
     },
-    {
-      sessionId,
-      userId: 'user_123'
-    }
-  );
-
-  history.push({ role: 'assistant', content: response.choices[0].message.content });
-}
-```
-
-## Supported Providers
-
-`protect()` automatically detects and audits calls to:
-
-- OpenAI (GPT-4, GPT-4o, o1, o3)
-- Anthropic (Claude Opus, Sonnet, Haiku)
-- Google (Gemini Pro, Gemini Flash)
-- Azure OpenAI
-- AWS Bedrock
-
-## Advanced Configuration
-
-### Direct Sandbox Configuration
-
-For power users who want full control:
-
-```typescript
-continum.configure({
-  apiKey: process.env.CONTINUM_API_KEY!,
-  sandbox: {
-    types: ['PII_DETECTION', 'SECURITY_AUDIT', 'PROMPT_INJECTION'],
-    frameworks: ['GDPR', 'SOC2'],
-    customRules: ['CUSTOM_RULE_1'],
-    region: 'eu-west-1',
-    blockOn: 'HIGH'
-  }
-});
-```
-
-### Error Handling
-
-```typescript
-continum.configure({
-  apiKey: process.env.CONTINUM_API_KEY!,
-  onError: (error) => {
-    console.error('Audit error:', error);
-    // Never throws — audit failures don't break your app
-  }
-});
-```
-
-### Alerts
-
-Receive compliance violation alerts directly in Slack, PagerDuty, or email without visiting the dashboard:
-
-```typescript
-continum.configure({
-  apiKey: process.env.CONTINUM_API_KEY!,
-  alerts: {
-    slack: process.env.SLACK_WEBHOOK_URL,
-    pagerduty: process.env.PAGERDUTY_KEY,
-    email: process.env.ALERT_EMAIL
-  }
-});
-```
-
-Note: Alert configuration in the SDK is currently for reference. Alerts are configured in the Continum dashboard under Settings → Alerts. For detailed alert setup, see the [Alert Setup Guide](../../docs/alert-setup-guide.md).
-
-## Migration from v1
-
-If you're using the old SDK:
-
-```typescript
-// Old (v1)
-const continum = new Continum({
-  continumKey: process.env.CONTINUM_KEY,
-  apiKeys: { openai: process.env.OPENAI_API_KEY }
-});
-
-const response = await continum.llm.openai.gpt_4.chat({
-  messages: [...]
-});
-```
-
-```typescript
-// New (v2)
-import { protect } from '@continum/sdk';
-import OpenAI from 'openai';
-
-const openai = new OpenAI();
-
-const response = await protect(
-  () => openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [...]
-  }),
-  {
-    apiKey: process.env.CONTINUM_API_KEY!
   },
-  {
-    preset: 'customer-support'
-  }
-);
+});
 ```
 
-Benefits of v2:
-- Use official provider SDKs directly
-- Zero-latency by default
-- Automatic sandbox resolution
-- Preset-based configuration
-- Environment-aware API keys (test vs live)
-- Correct function signature: `protect(fn, config, options)`
+## Supported LLM Providers
 
-## How It Works
+- **OpenAI** — `openai` package
+- **Anthropic** — `@anthropic-ai/sdk` package  
+- **Google Gemini** — `@google/generative-ai` package
+- **AWS Bedrock** — via bedrock-runtime endpoint
+- **Azure OpenAI** — via api.azure.com endpoint
 
-1. **Intercept**: SDK intercepts your LLM API call
-2. **Execute**: Your LLM call runs normally (zero latency)
-3. **Audit**: Audit is sent asynchronously to Continum API
-4. **Analyze**: Bedrock analyzes for violations in the background
-5. **Alert**: Violations trigger alerts and appear in dashboard
+The SDK intercepts at the HTTP transport layer, so it works with any client that uses Node.js `https.request` under the hood.
 
-The SDK never blocks your application - audits happen in the background.
+## Environment Variables
 
-## TypeScript Support
-
-Full TypeScript support with comprehensive types:
-
-```typescript
-import type {
-  RiskLevel,
-  ViolationCode,
-  ComplianceFramework,
-  Preset,
-  AuditSignal
-} from '@continum/sdk';
+```env
+CONTINUM_API_KEY=ctn_live_your_workspace_id_your_key
+CONTINUM_DEBUG=true  # Optional: verbose logging
 ```
 
-## License
+## Requirements
 
-MIT
-
-## Support
-
-- Documentation: https://docs.continum.co
-- Dashboard: https://app.continum.co
-- Email: support@continum.co
+- Node.js >= 18.0.0
+- TypeScript 5.x (if using TypeScript)

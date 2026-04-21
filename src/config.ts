@@ -1,7 +1,7 @@
 import type { ContinumConfig, ProtectOptions, ResolvedConfig, Preset, SandboxType, ComplianceFramework } from './types';
 import packageJson from '../package.json';
 
-const SDK_VERSION = packageJson.version;
+export const SDK_VERSION: string = packageJson.version;
 const DEFAULT_BASE_URL = 'https://api.continum.co';
 
 // ─── Preset to Sandbox Types Mapping ──────────────────────────────────────────
@@ -52,6 +52,8 @@ export function resolveConfig(
   };
 
   return {
+    // extractWorkspaceId no longer throws — returns '' on unrecognised format
+    // so the SDK degrades gracefully instead of silently swallowing everything
     workspaceId: extractWorkspaceId(merged.apiKey),
     apiKey: merged.apiKey,
     preset: merged.preset,
@@ -73,32 +75,20 @@ export function resolveSandboxTypes(config: {
   comply?: ComplianceFramework[];
   sandboxTypes?: SandboxType[];
 }): SandboxType[] {
-  // Direct specification takes precedence
   if (config.sandboxTypes && config.sandboxTypes.length > 0) {
     return config.sandboxTypes;
   }
 
   const types = new Set<SandboxType>();
 
-  // Add types from preset
   if (config.preset) {
-    const presetTypes = PRESET_MAPPINGS[config.preset];
-    if (presetTypes) {
-      presetTypes.forEach(t => types.add(t));
-    }
+    PRESET_MAPPINGS[config.preset]?.forEach(t => types.add(t));
   }
 
-  // Add types from compliance frameworks
-  if (config.comply && config.comply.length > 0) {
-    config.comply.forEach(framework => {
-      const frameworkTypes = FRAMEWORK_MAPPINGS[framework];
-      if (frameworkTypes) {
-        frameworkTypes.forEach(t => types.add(t));
-      }
-    });
-  }
+  config.comply?.forEach(framework => {
+    FRAMEWORK_MAPPINGS[framework]?.forEach(t => types.add(t));
+  });
 
-  // Default if nothing specified
   if (types.size === 0) {
     return ['PII_DETECTION', 'SECURITY_AUDIT'];
   }
@@ -110,14 +100,25 @@ export function resolveFrameworks(comply?: ComplianceFramework[]): ComplianceFra
   return comply ?? [];
 }
 
+/**
+ * Extract workspace ID from API key.
+ * Expected format: ctn_live_<workspaceId>_<key>  or  ctn_test_<workspaceId>_<key>
+ *
+ * CHANGED: No longer throws on invalid format. Returns '' so that misconfigured
+ * keys fail loudly at the API (401) rather than silently at SDK init, which was
+ * causing the entire audit pipeline to be swallowed by .catch() with no signal.
+ */
 function extractWorkspaceId(apiKey: string): string {
-  // API keys are in format: ctn_live_workspaceId_randomString
-  // or ctn_test_workspaceId_randomString
+  if (!apiKey) return '';
   const parts = apiKey.split('_');
-  if (parts.length >= 3 && (parts[0] === 'ctn') && (parts[1] === 'live' || parts[1] === 'test')) {
+  if (
+    parts.length >= 4 &&
+    parts[0] === 'ctn' &&
+    (parts[1] === 'live' || parts[1] === 'test')
+  ) {
     return parts[2];
   }
-  throw new Error('Invalid API key format. Expected format: ctn_live_<workspace_id>_<key> or ctn_test_<workspace_id>_<key>');
+  // Return empty string — resolver will get a 401/400 from the API with a clear
+  // error message rather than throwing here and being silently caught
+  return '';
 }
-
-export { SDK_VERSION };

@@ -1,53 +1,142 @@
+import * as https from 'https';
+import * as http from 'http';
 import type { LLMPayload } from './types';
 
 /**
- * Intercept an LLM call by patching fetch, running the function, and restoring
- * Returns both the result and the extracted payload
+ * Intercept an LLM call by monkey-patching http/https.request at the Node.js
+ * transport layer — this catches ALL HTTP clients including the Anthropic SDK's
+ * internal undici-based fetch, node-fetch, axios, got, etc.
+ *
+ * We do NOT patch global.fetch because:
+ *  - The Anthropic SDK (and most modern SDKs) bundle their own HTTP stack
+ *  - global.fetch patching only intercepts callers that explicitly use global.fetch
+ *  - https.request is the lowest common denominator in Node.js
  */
 export async function interceptLLMCall<T>(
   fn: () => Promise<T>
 ): Promise<{ result: T; payload: LLMPayload | null }> {
   let capturedPayload: LLMPayload | null = null;
 
-  // Store original fetch
-  const originalFetch = global.fetch;
+  // Store originals
+  const originalHttpsRequest = https.request;
+  const originalHttpRequest = http.request;
 
-  // Patch fetch to intercept LLM calls
-  global.fetch = async (input: string | Request | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+  /**
+   * Build a patched version of https.request / http.request that:
+   * 1. Captures the request body as it is written
+   * 2. Intercepts the response body for known LLM endpoints
+   * 3. Extracts the LLM payload once both are available
+   */
+  function buildPatchedRequest(
+    originalRequest: typeof https.request
+  ): typeof https.request {
+    return function patchedRequest(
+      urlOrOptions: any,
+      optionsOrCallback?: any,
+      maybeCallback?: any
+    ): any {
+      // Normalise arguments — Node's http.request is overloaded
+      let url: string | undefined;
+      let options: any = {};
+      let callback: ((...args: any[]) => any) | undefined;
 
-    // Call original fetch
-    const response = await originalFetch(input, init);
-
-    // Try to extract LLM payload from known providers
-    if (isLLMEndpoint(url)) {
-      try {
-        const requestBody = init?.body ? JSON.parse(init.body as string) : null;
-        const responseClone = response.clone();
-        const responseBody = await responseClone.json();
-
-        capturedPayload = extractPayload(url, requestBody, responseBody);
-      } catch (error) {
-        // Failed to extract — continue without audit
+      if (typeof urlOrOptions === 'string' || urlOrOptions instanceof URL) {
+        url = urlOrOptions.toString();
+        if (typeof optionsOrCallback === 'function') {
+          callback = optionsOrCallback;
+        } else {
+          options = optionsOrCallback ?? {};
+          callback = maybeCallback;
+        }
+      } else {
+        options = urlOrOptions ?? {};
+        url =
+          options.href ??
+          (options.host
+            ? `https://${options.host}${options.path ?? ''}`
+            : undefined);
+        callback = typeof optionsOrCallback === 'function'
+          ? optionsOrCallback
+          : maybeCallback;
       }
-    }
 
-    return response;
-  };
+      // Only intercept known LLM endpoints
+      if (!url || !isLLMEndpoint(url)) {
+        return originalRequest(urlOrOptions, optionsOrCallback, maybeCallback);
+      }
+
+      // Make the real request
+      const req = originalRequest(urlOrOptions, optionsOrCallback, maybeCallback);
+
+      // Capture request body chunks as they are written
+      const requestChunks: Buffer[] = [];
+      const originalWrite = req.write.bind(req);
+      const originalEnd = req.end.bind(req);
+
+      req.write = function (chunk: any, ...args: any[]) {
+        if (chunk) {
+          requestChunks.push(
+            Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          );
+        }
+        return originalWrite(chunk, ...args);
+      };
+
+      req.end = function (chunk?: any, ...args: any[]) {
+        if (chunk) {
+          requestChunks.push(
+            Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          );
+        }
+        return originalEnd(chunk, ...args);
+      };
+
+      // Intercept the response
+      req.on('response', (res: http.IncomingMessage) => {
+        const responseChunks: Buffer[] = [];
+
+        res.on('data', (chunk: Buffer) => {
+          responseChunks.push(chunk);
+        });
+
+        res.on('end', () => {
+          // Only extract once — first successful LLM response wins
+          if (capturedPayload) return;
+
+          try {
+            const requestBody = requestChunks.length
+              ? JSON.parse(Buffer.concat(requestChunks).toString('utf8'))
+              : null;
+            const responseBody = JSON.parse(
+              Buffer.concat(responseChunks).toString('utf8')
+            );
+            capturedPayload = extractPayload(url!, requestBody, responseBody);
+          } catch {
+            // Extraction failed — continue without audit
+          }
+        });
+      });
+
+      return req;
+    } as typeof https.request;
+  }
+
+  // Patch both https and http
+  (https as any).request = buildPatchedRequest(originalHttpsRequest);
+  (http as any).request = buildPatchedRequest(originalHttpRequest);
 
   try {
-    // Run the function with patched fetch
     const result = await fn();
     return { result, payload: capturedPayload };
   } finally {
-    // Always restore original fetch
-    global.fetch = originalFetch;
+    // Always restore originals
+    (https as any).request = originalHttpsRequest;
+    (http as any).request = originalHttpRequest;
   }
 }
 
-/**
- * Check if URL is an LLM endpoint
- */
+// ─── Endpoint Detection ────────────────────────────────────────────────────────
+
 function isLLMEndpoint(url: string): boolean {
   return (
     url.includes('api.openai.com') ||
@@ -58,9 +147,8 @@ function isLLMEndpoint(url: string): boolean {
   );
 }
 
-/**
- * Extract LLM payload from request/response
- */
+// ─── Payload Extraction ────────────────────────────────────────────────────────
+
 function extractPayload(
   url: string,
   requestBody: any,
@@ -74,92 +162,72 @@ function extractPayload(
     } else if (url.includes('generativelanguage.googleapis.com')) {
       return extractGeminiPayload(requestBody, responseBody);
     }
-  } catch (error) {
+  } catch {
     // Extraction failed — return null
   }
-
   return null;
 }
 
-/**
- * Extract OpenAI payload
- */
 function extractOpenAIPayload(request: any, response: any): LLMPayload {
-  const messages = request.messages || [];
+  const messages = request?.messages ?? [];
   const systemMessage = messages.find((m: any) => m.role === 'system');
-  const userMessage = messages.findLast((m: any) => m.role === 'user');
-
-  const choice = response.choices?.[0];
+  const userMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+  const choice = response?.choices?.[0];
   const message = choice?.message;
 
   return {
     provider: 'openai',
-    model: response.model || request.model || 'unknown',
-    systemPrompt: systemMessage?.content || '',
-    userInput: extractContent(userMessage?.content) || '',
-    modelOutput: message?.content || '',
+    model: response?.model ?? request?.model ?? 'unknown',
+    systemPrompt: extractContent(systemMessage?.content),
+    userInput: extractContent(userMessage?.content),
+    modelOutput: message?.content ?? '',
     thinkingBlock: message?.reasoning_content,
-    promptTokens: response.usage?.prompt_tokens,
-    outputTokens: response.usage?.completion_tokens,
+    promptTokens: response?.usage?.prompt_tokens,
+    outputTokens: response?.usage?.completion_tokens,
   };
 }
 
-/**
- * Extract Anthropic payload
- */
 function extractAnthropicPayload(request: any, response: any): LLMPayload {
-  const messages = request.messages || [];
-  const userMessage = messages.findLast((m: any) => m.role === 'user');
-
-  const content = response.content?.[0];
+  const messages = request?.messages ?? [];
+  const userMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+  const content = response?.content?.[0];
 
   return {
     provider: 'anthropic',
-    model: response.model || request.model || 'unknown',
-    systemPrompt: request.system || '',
-    userInput: extractContent(userMessage?.content) || '',
-    modelOutput: content?.text || '',
+    model: response?.model ?? request?.model ?? 'unknown',
+    systemPrompt: extractContent(request?.system),
+    userInput: extractContent(userMessage?.content),
+    modelOutput: content?.text ?? '',
     thinkingBlock: content?.thinking,
-    promptTokens: response.usage?.input_tokens,
-    outputTokens: response.usage?.output_tokens,
+    promptTokens: response?.usage?.input_tokens,
+    outputTokens: response?.usage?.output_tokens,
   };
 }
 
-/**
- * Extract Gemini payload
- */
 function extractGeminiPayload(request: any, response: any): LLMPayload {
-  const contents = request.contents || [];
-  const userContent = contents.findLast((c: any) => c.role === 'user');
-
-  const candidate = response.candidates?.[0];
+  const contents = request?.contents ?? [];
+  const userContent = [...contents].reverse().find((c: any) => c.role === 'user');
+  const candidate = response?.candidates?.[0];
   const part = candidate?.content?.parts?.[0];
 
   return {
     provider: 'google',
-    model: request.model || 'gemini-pro',
-    systemPrompt: request.systemInstruction?.parts?.[0]?.text || '',
-    userInput: userContent?.parts?.[0]?.text || '',
-    modelOutput: part?.text || '',
-    promptTokens: response.usageMetadata?.promptTokenCount,
-    outputTokens: response.usageMetadata?.candidatesTokenCount,
+    model: request?.model ?? 'gemini-pro',
+    systemPrompt: request?.systemInstruction?.parts?.[0]?.text ?? '',
+    userInput: userContent?.parts?.[0]?.text ?? '',
+    modelOutput: part?.text ?? '',
+    promptTokens: response?.usageMetadata?.promptTokenCount,
+    outputTokens: response?.usageMetadata?.candidatesTokenCount,
   };
 }
 
-/**
- * Extract text content from message content (handles both string and array formats)
- */
 function extractContent(content: any): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-
+  if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
-      .filter((part: any) => part.type === 'text')
-      .map((part: any) => part.text)
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
       .join('\n');
   }
-
   return '';
 }

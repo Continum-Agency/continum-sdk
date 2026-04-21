@@ -3,15 +3,16 @@ import { fireAuditAsync, fireAuditSync, generateAuditId } from './transport';
 import { getSandboxId } from './resolver';
 import { resolveConfig, SDK_VERSION } from './config';
 import { runViolationHandlers } from './handlers';
-import type { ContinumConfig, ProtectOptions, AuditSignal, RiskLevel } from './types';
+import type { ContinumConfig, ProtectOptions, AuditSignal, RiskLevel, AuditPayload } from './types';
 
 /**
- * Protect an LLM call with automatic compliance auditing
- * 
+ * Protect an LLM call with automatic compliance auditing.
+ *
  * @param fn - The function that makes the LLM call
- * @param options - Optional configuration overrides
+ * @param config - Continum configuration
+ * @param options - Optional per-call overrides
  * @returns The result of the LLM call
- * 
+ *
  * @example
  * ```typescript
  * const response = await protect(
@@ -19,7 +20,7 @@ import type { ContinumConfig, ProtectOptions, AuditSignal, RiskLevel } from './t
  *     model: 'gpt-4',
  *     messages: [{ role: 'user', content: 'Hello' }]
  *   }),
- *   { preset: 'customer-support' }
+ *   { apiKey: process.env.CONTINUM_API_KEY!, preset: 'customer-support' }
  * );
  * ```
  */
@@ -30,7 +31,7 @@ export async function protect<T>(
 ): Promise<T> {
   const resolvedConfig = resolveConfig(config, options);
 
-  // Intercept the LLM call — patches fetch, runs fn(), restores fetch
+  // Intercept the LLM call — patches https.request, runs fn(), restores it
   const { result, payload } = await interceptLLMCall(fn);
 
   // If interception yielded no payload (non-LLM function call), return as-is
@@ -38,12 +39,12 @@ export async function protect<T>(
     return result;
   }
 
-  // Attach session and user context
-  const enrichedPayload = {
+  // Build the full audit payload — immutable snapshot, no mutation after this
+  const basePayload: AuditPayload = {
     ...payload,
     auditId: generateAuditId(),
-    sandboxId: '', // Will be filled after resolution
-    sandboxSlug: '', // Will be filled after resolution
+    sandboxId: '',
+    sandboxSlug: '',
     sessionId: options?.sessionId,
     userId: options?.userId,
     metadata: options?.metadata,
@@ -55,11 +56,9 @@ export async function protect<T>(
 
   if (blockOn) {
     // Blocking mode — await audit before returning result
-    // Adds latency — only use when response safety > response speed
     const { sandboxId, sandboxSlug } = await getSandboxId(resolvedConfig);
-    enrichedPayload.sandboxId = sandboxId;
-    enrichedPayload.sandboxSlug = sandboxSlug;
 
+    const enrichedPayload: AuditPayload = { ...basePayload, sandboxId, sandboxSlug };
     const signal = await fireAuditSync(enrichedPayload, resolvedConfig);
 
     if (shouldBlock(signal.riskLevel, blockOn)) {
@@ -70,16 +69,26 @@ export async function protect<T>(
     return result;
   }
 
-  // Default — fire and forget — zero latency impact
+  // Default — fire and forget — zero latency impact on the caller.
+  //
+  // FIXED: We snapshot basePayload into a local const before the async chain
+  // so concurrent calls to protect() cannot race on a shared mutable object.
+  // Each invocation gets its own closure over its own payload snapshot.
+  const payloadSnapshot = { ...basePayload };
+
   getSandboxId(resolvedConfig)
     .then(({ sandboxId, sandboxSlug }) => {
-      enrichedPayload.sandboxId = sandboxId;
-      enrichedPayload.sandboxSlug = sandboxSlug;
+      // Produce a new object — never mutate payloadSnapshot
+      const enrichedPayload: AuditPayload = {
+        ...payloadSnapshot,
+        sandboxId,
+        sandboxSlug,
+      };
       return fireAuditAsync(enrichedPayload, resolvedConfig);
     })
     .catch(err => {
       if (resolvedConfig.onError) {
-        resolvedConfig.onError(err);
+        resolvedConfig.onError(err instanceof Error ? err : new Error(String(err)));
       }
       // Never surface audit errors to the application user
     });
@@ -87,17 +96,15 @@ export async function protect<T>(
   return result;
 }
 
-/**
- * Check if a signal should block based on risk level threshold
- */
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function shouldBlock(signalLevel: RiskLevel, blockOn: RiskLevel): boolean {
-  const order = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  const order: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
   return order.indexOf(signalLevel) >= order.indexOf(blockOn);
 }
 
-/**
- * Error thrown when an LLM call is blocked by Continum
- */
+// ─── Error ────────────────────────────────────────────────────────────────────
+
 export class ContinumBlockedError extends Error {
   public readonly signal: AuditSignal;
 
